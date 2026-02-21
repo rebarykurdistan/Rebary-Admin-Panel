@@ -1,0 +1,21 @@
+// Platform definitions for contact data
+export const PLATFORMS = [
+  { key: 'phone', label: 'Phone', icon: '📱', color: 'green' },
+  { key: 'whatsapp', label: 'WhatsApp', icon: '💬', color: 'green' },
+  { key: 'viber', label: 'Viber', icon: '📞', color: 'purple' },
+  { key: 'telegram', label: 'Telegram', icon: '✈️', color: 'blue' },
+  { key: 'email', label: 'Email', icon: '✉️', color: 'red' },
+  { key: 'facebook', label: 'Facebook', icon: '👤', color: 'blue' },
+  { key: 'instagram', label: 'Instagram', icon: '📷', color: 'pink' },
+  { key: 'tiktok', label: 'TikTok', icon: '🎵', color: 'black' },
+  { key: 'linkedin', label: 'LinkedIn', icon: '💼', color: 'blue' },
+  { key: 'x', label: 'X (Twitter)', icon: '𝕏', color: 'black' },
+  { key: 'snapchat', label: 'Snapchat', icon: '👻', color: 'yellow' },
+  { key: 'youtube', label: 'YouTube', icon: '▶️', color: 'red' },
+  { key: 'website', label: 'Website', icon: '🌐', color: 'gray' },
+  { key: 'applestore', label: 'Apple Store', icon: '', color: 'black' },
+  { key: 'googleplay', label: 'Google Play', icon: '', color: 'green' },
+  { key: 'googlemap', label: 'Google Maps', icon: '📍', color: 'red' },
+  { key: 'waze', label: 'Waze', icon: '🚗', color: 'blue' },
+  { key: 'mapsme', label: 'Maps.me', icon: '🗺️', color: 'orange' },
+];
