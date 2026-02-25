@@ -42,20 +42,20 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      title: 'Services',
-      value: stats?.servicesCount || 0,
-      icon: FiPackage,
-      color: 'from-accent-blue to-accent-lightblue',
-      show: canAccess('services_new'),
-      href: '/services',
-    },
-    {
       title: 'Categories',
       value: stats?.categoriesCount || 0,
       icon: FiGrid,
       color: 'from-accent-green to-accent-lightgreen',
       show: canAccess('categories_new'),
       href: '/categories',
+    },
+    {
+      title: 'Services',
+      value: stats?.servicesCount || 0,
+      icon: FiPackage,
+      color: 'from-accent-blue to-accent-lightblue',
+      show: canAccess('services_new'),
+      href: '/services',
     },
     {
       title: 'Tags',
@@ -71,7 +71,7 @@ export default function DashboardPage() {
     <ProtectedRoute>
       <div className="flex min-h-screen bg-gray-50">
         <Sidebar />
-        
+
         <main className="flex-1 lg:ml-64 p-4 lg:p-8">
           {/* Header */}
           <div className="mb-8">
@@ -130,16 +130,7 @@ export default function DashboardPage() {
           <div className="card">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {canAccess('services_new') && (
-                <Link
-                  href="/services?action=create"
-                  className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-all text-center group"
-                >
-                  <FiPackage className="mx-auto mb-2 text-gray-400 group-hover:text-primary" size={32} />
-                  <p className="font-medium text-gray-700 group-hover:text-primary">Add New Service</p>
-                </Link>
-              )}
-              
+
               {canAccess('categories_new') && (
                 <Link
                   href="/categories?action=create"
@@ -149,7 +140,17 @@ export default function DashboardPage() {
                   <p className="font-medium text-gray-700 group-hover:text-primary">Add New Category</p>
                 </Link>
               )}
-              
+
+              {canAccess('services_new') && (
+                <Link
+                  href="/services?action=create"
+                  className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-all text-center group"
+                >
+                  <FiPackage className="mx-auto mb-2 text-gray-400 group-hover:text-primary" size={32} />
+                  <p className="font-medium text-gray-700 group-hover:text-primary">Add New Service</p>
+                </Link>
+              )}
+
               {canAccess('tags_new') && (
                 <Link
                   href="/tags?action=create"
@@ -159,6 +160,7 @@ export default function DashboardPage() {
                   <p className="font-medium text-gray-700 group-hover:text-primary">Add New Tag</p>
                 </Link>
               )}
+              
             </div>
           </div>
 
