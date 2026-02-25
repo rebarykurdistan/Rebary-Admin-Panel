@@ -15,6 +15,7 @@ import ProtectedRoute from '../../components/ProtectedRoute';
 import LanguageTabs from '../../components/LanguageTabs';
 import { FiPlus, FiEdit2, FiTrash2, FiCopy, FiSearch, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function CategoriesPage() {
   const { canAccess } = useAuth();
@@ -25,6 +26,12 @@ export default function CategoriesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
 
   const [formData, setFormData] = useState({
     name_sor: '',
@@ -155,20 +162,43 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
+  // const handleDelete = async (id) => {
+  //   if (!confirm('Are you sure you want to delete this category?')) return;
 
-    setLoading(true);
-    try {
-      await deleteCategory(id);
-      toast.success('Category deleted successfully!');
-      await loadCategories();
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      toast.error('Failed to delete category');
-    } finally {
-      setLoading(false);
-    }
+  //   setLoading(true);
+  //   try {
+  //     await deleteCategory(id);
+  //     toast.success('Category deleted successfully!');
+  //     await loadCategories();
+  //   } catch (error) {
+  //     console.error('Error deleting category:', error);
+  //     toast.error('Failed to delete category');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  const handleDelete = async (id) => {
+    // We don't need a try/catch around the state setter itself, 
+    // only inside the actual deletion logic.
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Category?',
+      message: 'Are you sure you want to delete this category? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await deleteCategory(id);
+          toast.success('Category deleted successfully!');
+          await loadCategories();
+        } catch (error) {
+          console.error('Error deleting category:', error);
+          toast.error('Failed to delete category');
+        } finally {
+          // Close the dialog only AFTER the user confirms and the action completes
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const handleDuplicate = async (id) => {
@@ -186,20 +216,43 @@ export default function CategoriesPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedCategories.length} categories?`)) return;
+    // if (!confirm(`Delete ${selectedCategories.length} categories?`)) return;
 
-    setLoading(true);
-    try {
-      await bulkDeleteCategories(selectedCategories);
-      toast.success(`${selectedCategories.length} categories deleted!`);
-      setSelectedCategories([]);
-      await loadCategories();
-    } catch (error) {
-      console.error('Error deleting categories:', error);
-      toast.error('Failed to delete categories');
-    } finally {
-      setLoading(false);
-    }
+    // setLoading(true);
+    // try {
+    //   await bulkDeleteCategories(selectedCategories);
+    //   toast.success(`${selectedCategories.length} categories deleted!`);
+    //   setSelectedCategories([]);
+    //   await loadCategories();
+    // } catch (error) {
+    //   console.error('Error deleting categories:', error);
+    //   toast.error('Failed to delete categories');
+    // } finally {
+    //   setLoading(false);
+    // }
+
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected Categories?',
+      message: `Are you sure you want to delete ${selectedCategories.length} selected categories? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await bulkDeleteCategories(selectedCategories);
+          toast.success(`${selectedCategories.length} categories deleted successfully!`);
+          setSelectedCategories([]);
+          await loadCategories();
+        } catch (error) {
+          console.error('Error deleting categories:', error);
+          toast.error('Failed to delete categories');
+        } finally {
+          // Close the dialog only AFTER the user confirms and the action completes
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+
+
   };
 
   if (!canAccess('categories_new')) {
@@ -214,7 +267,7 @@ export default function CategoriesPage() {
     <ProtectedRoute>
       <div className="flex min-h-screen bg-gray-50">
         <Sidebar />
-        
+
         <main className="flex-1 lg:ml-64 p-4 lg:p-8">
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -239,8 +292,17 @@ export default function CategoriesPage() {
                   placeholder="Search categories..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input pl-10 w-full"
+                  className="input pl-10 pr-10 w-full"
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Clear search"
+                  >
+                    <FiX size={16} />
+                  </button>
+                )}
               </div>
               {selectedCategories.length > 0 && (
                 <button
@@ -269,6 +331,7 @@ export default function CategoriesPage() {
                   <div className="flex items-start justify-between mb-3">
                     <input
                       type="checkbox"
+                      title="checkbox"
                       checked={selectedCategories.includes(category.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -283,18 +346,21 @@ export default function CategoriesPage() {
                       <button
                         onClick={() => handleOpenModal(category)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Edit"
                       >
                         <FiEdit2 size={16} className="text-gray-600" />
                       </button>
                       <button
                         onClick={() => handleDuplicate(category.id)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Duplicate"
                       >
                         <FiCopy size={16} className="text-gray-600" />
                       </button>
                       <button
                         onClick={() => handleDelete(category.id)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Delete"
                       >
                         <FiTrash2 size={16} className="text-red-600" />
                       </button>
@@ -331,6 +397,17 @@ export default function CategoriesPage() {
           )}
         </main>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
 
       {showModal && (
         <div className="modal-overlay" onClick={handleCloseModal}>
@@ -380,6 +457,11 @@ export default function CategoriesPage() {
                           className="input"
                           placeholder="https://example.com/icon.png"
                         />
+                        {formData[`icon_${lang}`] && (
+                          <div className="mt-2">
+                            <img src={formData[`icon_${lang}`]} alt="Preview" className="w-32 h-32 object-cover rounded" />
+                          </div>
+                        )}
                       </div>
 
                       <div>

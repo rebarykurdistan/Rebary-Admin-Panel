@@ -28,16 +28,16 @@ export default function Sidebar() {
       show: true,
     },
     {
-      name: 'Services',
-      href: '/services',
-      icon: FiPackage,
-      show: canAccess('services_new'),
-    },
-    {
       name: 'Categories',
       href: '/categories',
       icon: FiGrid,
       show: canAccess('categories_new'),
+    },
+    {
+      name: 'Services',
+      href: '/services',
+      icon: FiPackage,
+      show: canAccess('services_new'),
     },
     {
       name: 'Tags',

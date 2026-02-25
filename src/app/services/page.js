@@ -16,6 +16,7 @@ import ProtectedRoute from '../../components/ProtectedRoute';
 import LanguageTabs from '../../components/LanguageTabs';
 import { FiPlus, FiEdit2, FiTrash2, FiCopy, FiSearch, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function ServicesPage() {
   const { canAccess } = useAuth();
@@ -28,7 +29,12 @@ export default function ServicesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
-
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
   const [formData, setFormData] = useState({
     name_sor: '',
     name_bad: '',
@@ -112,7 +118,7 @@ export default function ServicesPage() {
   const handleOpenModal = (service = null) => {
     if (service) {
       setEditingService(service);
-      
+
       // Extract phone data from phonedata array if exists
       const phoneEntry = service.phonedata && service.phonedata[0];
       const whatsappEntry = service.whatsappdata && service.whatsappdata[0];
@@ -120,7 +126,7 @@ export default function ServicesPage() {
       const facebookEntry = service.facebookdata && service.facebookdata[0];
       const instagramEntry = service.instagramdata && service.instagramdata[0];
       const websiteEntry = service.websitedata && service.websitedata[0];
-      
+
       setFormData({
         name_sor: service.name_sor || '',
         name_bad: service.name_bad || '',
@@ -203,7 +209,7 @@ export default function ServicesPage() {
     try {
       // Prepare data with contact platforms in proper format
       const serviceData = { ...formData };
-      
+
       // Convert contact info to Firebase format
       if (formData.phone) {
         serviceData.phonedata = [{
@@ -221,7 +227,7 @@ export default function ServicesPage() {
           phoneclickcount_en: 0,
         }];
       }
-      
+
       if (formData.whatsapp) {
         serviceData.whatsappdata = [{
           whatsapp_sor: formData.whatsapp,
@@ -238,7 +244,7 @@ export default function ServicesPage() {
           whatsappclickcount_en: 0,
         }];
       }
-      
+
       if (formData.email) {
         serviceData.emaildata = [{
           email_sor: formData.email,
@@ -255,7 +261,7 @@ export default function ServicesPage() {
           emailclickcount_en: 0,
         }];
       }
-      
+
       if (formData.facebook) {
         serviceData.facebookdata = [{
           facebook_sor: formData.facebook,
@@ -272,7 +278,7 @@ export default function ServicesPage() {
           facebookclickcount_en: 0,
         }];
       }
-      
+
       if (formData.instagram) {
         serviceData.instagramdata = [{
           instagram_sor: formData.instagram,
@@ -289,7 +295,7 @@ export default function ServicesPage() {
           instagramclickcount_en: 0,
         }];
       }
-      
+
       if (formData.website) {
         serviceData.websitedata = [{
           website_sor: formData.website,
@@ -306,7 +312,7 @@ export default function ServicesPage() {
           websiteclickcount_en: 0,
         }];
       }
-      
+
       // Remove temp fields
       delete serviceData.phone;
       delete serviceData.phoneText;
@@ -336,19 +342,42 @@ export default function ServicesPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this service?')) return;
+    // if (!confirm('Are you sure you want to delete this service?')) return;
 
-    setLoading(true);
-    try {
-      await deleteService(id);
-      toast.success('Service deleted successfully!');
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting service:', error);
-      toast.error('Failed to delete service');
-    } finally {
-      setLoading(false);
-    }
+    // setLoading(true);
+    // try {
+    //   await deleteService(id);
+    //   toast.success('Service deleted successfully!');
+    //   await loadData();
+    // } catch (error) {
+    //   console.error('Error deleting service:', error);
+    //   toast.error('Failed to delete service');
+    // } finally {
+    //   setLoading(false);
+    // }
+
+
+    // We don't need a try/catch around the state setter itself, 
+    // only inside the actual deletion logic.
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Service?',
+      message: 'Are you sure you want to delete this service? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await deleteService(id);
+          toast.success('Service deleted successfully!');
+          await loadData();
+        } catch (error) {
+          console.error('Error deleting service:', error);
+          toast.error('Failed to delete service');
+        } finally {
+          // Close the dialog only AFTER the user confirms and the action completes
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+
   };
 
   const handleDuplicate = async (id) => {
@@ -366,20 +395,42 @@ export default function ServicesPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedServices.length} services?`)) return;
+    // if (!confirm(`Delete ${selectedServices.length} services?`)) return;
 
-    setLoading(true);
-    try {
-      await bulkDeleteServices(selectedServices);
-      toast.success(`${selectedServices.length} services deleted!`);
-      setSelectedServices([]);
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting services:', error);
-      toast.error('Failed to delete services');
-    } finally {
-      setLoading(false);
-    }
+    // setLoading(true);
+    // try {
+    //   await bulkDeleteServices(selectedServices);
+    //   toast.success(`${selectedServices.length} services deleted!`);
+    //   setSelectedServices([]);
+    //   await loadData();
+    // } catch (error) {
+    //   console.error('Error deleting services:', error);
+    //   toast.error('Failed to delete services');
+    // } finally {
+    //   setLoading(false);
+    // }
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected Services?',
+      message: `Are you sure you want to delete ${selectedServices.length} selected services? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await bulkDeleteServices(selectedServices);
+          toast.success(`${selectedServices.length} categories deleted successfully!`);
+          setSelectedServices([]);
+          await loadData();
+        } catch (error) {
+          console.error('Error deleting services:', error);
+          toast.error('Failed to delete services');
+        } finally {
+          // Close the dialog only AFTER the user confirms and the action completes
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+
+
   };
 
   if (!canAccess('services_new')) {
@@ -394,7 +445,7 @@ export default function ServicesPage() {
     <ProtectedRoute>
       <div className="flex min-h-screen bg-gray-50">
         <Sidebar />
-        
+
         <main className="flex-1 lg:ml-64 p-4 lg:p-8">
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -409,7 +460,7 @@ export default function ServicesPage() {
               Add New Service
             </button>
           </div>
-
+          {/* 
           <div className="card mb-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1 relative">
@@ -444,6 +495,63 @@ export default function ServicesPage() {
                 </button>
               )}
             </div>
+          </div> */}
+
+          <div className="card mb-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-center">
+
+              {/* 1. Search Bar: Fixed width base, doesn't need to grow too much */}
+              <div className="relative w-full lg:w-72 shrink-0">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search services..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  // className="input pl-10 w-full"
+                  className="input pl-10 pr-10 w-full" // Added padding-right for the X
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Clear search"
+                  >
+                    <FiX size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Category Dropdown: flex-1 makes it take all the remaining available space */}
+              <div className="w-full lg:flex-1">
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="select w-full"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={`categories_new/${cat.id}`}>
+                      {cat.name_sor || cat.name_en || cat.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Bulk Delete: Only takes the space it needs for the text */}
+              {selectedServices.length > 0 && (
+                <div className="w-full lg:w-auto">
+                  <button
+                    onClick={handleBulkDelete}
+                    className="btn btn-danger flex items-center justify-center gap-2 w-full whitespace-nowrap px-6"
+                  >
+                    <FiTrash2 />
+                    <span>Delete {selectedServices.length}</span>
+                  </button>
+                </div>
+              )}
+
+            </div>
           </div>
 
           {loading && !services.length ? (
@@ -461,6 +569,7 @@ export default function ServicesPage() {
                   <div className="flex items-start justify-between mb-3">
                     <input
                       type="checkbox"
+                      title="checkbox"
                       checked={selectedServices.includes(service.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -475,18 +584,21 @@ export default function ServicesPage() {
                       <button
                         onClick={() => handleOpenModal(service)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Edit"
                       >
                         <FiEdit2 size={16} className="text-gray-600" />
                       </button>
                       <button
                         onClick={() => handleDuplicate(service.id)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Duplicate"
                       >
                         <FiCopy size={16} className="text-gray-600" />
                       </button>
                       <button
                         onClick={() => handleDelete(service.id)}
                         className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Delete"
                       >
                         <FiTrash2 size={16} className="text-red-600" />
                       </button>
@@ -524,6 +636,17 @@ export default function ServicesPage() {
           )}
         </main>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
 
       {showModal && (
         <div className="modal-overlay" onClick={handleCloseModal}>
@@ -626,6 +749,11 @@ export default function ServicesPage() {
                           className="input"
                           placeholder="https://example.com/image.png"
                         />
+                        {formData[`image_${lang}`] && (
+                          <div className="mt-2">
+                            <img src={formData[`image_${lang}`]} alt="Preview" className="w-32 h-32 object-cover rounded" />
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -650,7 +778,7 @@ export default function ServicesPage() {
                 {/* Contact Information */}
                 <div className="mt-8 border-t pt-6">
                   <h3 className="text-lg font-bold mb-4">Contact Information</h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

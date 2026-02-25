@@ -406,6 +406,7 @@ import ProtectedRoute from '../../components/ProtectedRoute';
 import LanguageTabs from '../../components/LanguageTabs';
 import { FiPlus, FiEdit2, FiTrash2, FiCopy, FiSearch, FiX } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function TagsPage() {
   const { canAccess } = useAuth();
@@ -416,7 +417,12 @@ export default function TagsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingTag, setEditingTag] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
-
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
   const [formData, setFormData] = useState({
     tagsname_sor: '',
     tagsname_bad: '',
@@ -545,19 +551,41 @@ export default function TagsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this tag?')) return;
+    // if (!confirm('Are you sure you want to delete this tag?')) return;
 
-    setLoading(true);
-    try {
-      await deleteTag(id);
-      toast.success('Tag deleted successfully!');
-      await loadTags();
-    } catch (error) {
-      console.error('Error deleting tag:', error);
-      toast.error('Failed to delete tag');
-    } finally {
-      setLoading(false);
-    }
+    // setLoading(true);
+    // try {
+    //   await deleteTag(id);
+    //   toast.success('Tag deleted successfully!');
+    //   await loadTags();
+    // } catch (error) {
+    //   console.error('Error deleting tag:', error);
+    //   toast.error('Failed to delete tag');
+    // } finally {
+    //   setLoading(false);
+    // }
+
+    // We don't need a try/catch around the state setter itself, 
+        // only inside the actual deletion logic.
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Delete Tag?',
+          message: 'Are you sure you want to delete this tag? This action cannot be undone.',
+          onConfirm: async () => {
+            try {
+              await deleteTag(id);
+              toast.success('Tag deleted successfully!');
+              await loadTags();
+            } catch (error) {
+              console.error('Error deleting tag:', error);
+              toast.error('Failed to delete tag');
+            } finally {
+              // Close the dialog only AFTER the user confirms and the action completes
+              setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+            }
+          },
+        });
+
   };
 
   const handleDuplicate = async (id) => {
@@ -575,20 +603,41 @@ export default function TagsPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedTags.length} tags?`)) return;
+    // if (!confirm(`Delete ${selectedTags.length} tags?`)) return;
 
-    setLoading(true);
-    try {
-      await bulkDeleteTags(selectedTags);
-      toast.success(`${selectedTags.length} tags deleted!`);
-      setSelectedTags([]);
-      await loadTags();
-    } catch (error) {
-      console.error('Error deleting tags:', error);
-      toast.error('Failed to delete tags');
-    } finally {
-      setLoading(false);
-    }
+    // setLoading(true);
+    // try {
+    //   await bulkDeleteTags(selectedTags);
+    //   toast.success(`${selectedTags.length} tags deleted!`);
+    //   setSelectedTags([]);
+    //   await loadTags();
+    // } catch (error) {
+    //   console.error('Error deleting tags:', error);
+    //   toast.error('Failed to delete tags');
+    // } finally {
+    //   setLoading(false);
+    // }
+
+setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected Tags?',
+      message: `Are you sure you want to delete ${selectedTags.length} selected tags? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await bulkDeleteTags(selectedTags);
+          toast.success(`${selectedTags.length} tags deleted successfully!`);
+          setSelectedTags([]);
+          await loadTags();
+        } catch (error) {
+          console.error('Error deleting tags:', error);
+          toast.error('Failed to delete tags');
+        } finally {
+          // Close the dialog only AFTER the user confirms and the action completes
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+
   };
 
   if (!canAccess('tags_new')) {
@@ -628,8 +677,17 @@ export default function TagsPage() {
                   placeholder="Search tags..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input pl-10 w-full"
+                  className="input pl-10 pr-10 w-full"
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Clear search"
+                  >
+                    <FiX size={16} />
+                  </button>
+                )}
               </div>
               {selectedTags.length > 0 && (
                 <button
@@ -666,6 +724,7 @@ export default function TagsPage() {
                     <div className="flex items-start justify-between mb-3">
                       <input
                         type="checkbox"
+                        title="checkbox"
                         checked={selectedTags.includes(tag.id)}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -680,18 +739,21 @@ export default function TagsPage() {
                         <button
                           onClick={() => handleOpenModal(tag)}
                           className="p-1.5 hover:bg-gray-100 rounded"
+                          title="Edit"
                         >
                           <FiEdit2 size={16} className="text-gray-600" />
                         </button>
                         <button
                           onClick={() => handleDuplicate(tag.id)}
                           className="p-1.5 hover:bg-gray-100 rounded"
+                          title="Duplicate"
                         >
                           <FiCopy size={16} className="text-gray-600" />
                         </button>
                         <button
                           onClick={() => handleDelete(tag.id)}
                           className="p-1.5 hover:bg-gray-100 rounded"
+                          title="Delete"
                         >
                           <FiTrash2 size={16} className="text-red-600" />
                         </button>
@@ -731,6 +793,17 @@ export default function TagsPage() {
           )}
         </main>
       </div>
+
+      <ConfirmDialog
+  isOpen={confirmDialog.isOpen}
+  onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+  onConfirm={confirmDialog.onConfirm}
+  title={confirmDialog.title}
+  message={confirmDialog.message}
+  confirmText="Delete"
+  cancelText="Cancel"
+  type="danger"
+/>
 
       {showModal && (
         <div className="modal-overlay" onClick={handleCloseModal}>
