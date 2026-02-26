@@ -1,230 +1,255 @@
-// const functions = require('firebase-functions');
+// const { onCall, HttpsError } = require("firebase-functions/v2/https");
 // const admin = require('firebase-admin');
 
 // admin.initializeApp();
 
+// const db = admin.firestore();
+
 // // ============================================
 // // CREATE USER WITH ROLE
 // // ============================================
-// exports.createUserWithRole = functions.https.onCall(async (data, context) => {
-//   // Verify caller is authenticated and is super admin
-//   if (!context.auth) {
-//     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+// exports.createUserWithRole = onCall({ cors: true }, async (request) => {
+//   const { data, auth } = request;
+
+//   if (!auth) {
+//     throw new HttpsError('unauthenticated', 'User must be authenticated');
 //   }
 
-//   // Get caller's custom claims
-//   const callerToken = await admin.auth().getUser(context.auth.uid);
+//   // Force refresh to get latest claims
+//   const callerToken = await admin.auth().getUser(auth.uid);
 //   const callerClaims = callerToken.customClaims || {};
 
 //   if (callerClaims.role !== 'super_admin') {
-//     throw new functions.https.HttpsError(
-//       'permission-denied',
-//       'Only super admins can create users'
-//     );
+//     throw new HttpsError('permission-denied', 'Only super admins can create users');
 //   }
 
-//   const { email, password, role } = data;
+//   const { email, password, role, displayName } = data;
 
-//   // Validate input
 //   if (!email || !password || !role) {
-//     throw new functions.https.HttpsError(
-//       'invalid-argument',
-//       'Email, password, and role are required'
-//     );
+//     throw new HttpsError('invalid-argument', 'Email, password, and role are required');
 //   }
 
 //   if (!['super_admin', 'admin', 'editor'].includes(role)) {
-//     throw new functions.https.HttpsError(
-//       'invalid-argument',
-//       'Invalid role. Must be super_admin, admin, or editor'
-//     );
+//     throw new HttpsError('invalid-argument', 'Invalid role');
 //   }
 
 //   if (password.length < 6) {
-//     throw new functions.https.HttpsError(
-//       'invalid-argument',
-//       'Password must be at least 6 characters'
-//     );
+//     throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
 //   }
 
 //   try {
-//     // Create user in Firebase Auth
-//     const userRecord = await admin.auth().createUser({
-//       email: email,
-//       password: password,
-//       emailVerified: false,
-//     });
-
-//     // Set custom claims for role
-//     await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
-
-//     // Return success
-//     return {
-//       success: true,
+//     let userRecord;
+    
+//     try {
+//       // Try to create new user
+//       userRecord = await admin.auth().createUser({ email, password });
+//     } catch (authError) {
+//       if (authError.code === 'auth/email-already-exists') {
+//         // User exists in Auth but maybe not in Firestore — just get them
+//         userRecord = await admin.auth().getUserByEmail(email);
+//       } else {
+//         throw authError;
+//       }
+//     }
+  
+//     // Set/update custom claims
+//     await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+  
+//     // Create or overwrite Firestore doc
+//     await db.collection('users_new').doc(userRecord.uid).set({
 //       uid: userRecord.uid,
-//       email: email,
-//       role: role,
-//       message: `User created successfully with role: ${role}`,
-//     };
+//       email,
+//       role,
+//       displayName: displayName || '',
+//       disabled: false,
+//       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+//       createdBy: auth.uid,
+//     }, { merge: true }); // merge:true so existing fields aren't wiped
+  
+//     return { success: true, uid: userRecord.uid, email, role };
 //   } catch (error) {
 //     console.error('Error creating user:', error);
-//     throw new functions.https.HttpsError('internal', error.message);
+//     throw new HttpsError('internal', error.message);
 //   }
+
+
+//   // try {
+//   //   // 1. Create user in Firebase Auth
+//   //   const userRecord = await admin.auth().createUser({ email, password });
+
+//   //   // 2. Set custom claims
+//   //   await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+
+//   //   // 3. Create document in users_new collection
+//   //   await db.collection('users_new').doc(userRecord.uid).set({
+//   //     uid: userRecord.uid,
+//   //     email,
+//   //     role,
+//   //     displayName: displayName || '',
+//   //     disabled: false,
+//   //     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+//   //     createdBy: auth.uid,
+//   //   });
+
+//   //   return { success: true, uid: userRecord.uid, email, role };
+//   // } catch (error) {
+//   //   console.error('Error creating user:', error);
+//   //   throw new HttpsError('internal', error.message);
+//   // }
 // });
 
 // // ============================================
 // // UPDATE USER ROLE
 // // ============================================
-// exports.updateUserRole = functions.https.onCall(async (data, context) => {
-//   // Verify caller is authenticated and is super admin
-//   if (!context.auth) {
-//     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+// exports.updateUserRole = onCall({ cors: true }, async (request) => {
+//   const { data, auth } = request;
+
+//   if (!auth) {
+//     throw new HttpsError('unauthenticated', 'User must be authenticated');
 //   }
 
-//   const callerToken = await admin.auth().getUser(context.auth.uid);
-//   const callerClaims = callerToken.customClaims || {};
-
-//   if (callerClaims.role !== 'super_admin') {
-//     throw new functions.https.HttpsError(
-//       'permission-denied',
-//       'Only super admins can update user roles'
-//     );
+//   const callerToken = await admin.auth().getUser(auth.uid);
+//   if (callerToken.customClaims?.role !== 'super_admin') {
+//     throw new HttpsError('permission-denied', 'Only super admins can update roles');
 //   }
 
 //   const { uid, role } = data;
 
 //   if (!uid || !role) {
-//     throw new functions.https.HttpsError(
-//       'invalid-argument',
-//       'UID and role are required'
-//     );
-//   }
-
-//   if (!['super_admin', 'admin', 'editor'].includes(role)) {
-//     throw new functions.https.HttpsError(
-//       'invalid-argument',
-//       'Invalid role. Must be super_admin, admin, or editor'
-//     );
+//     throw new HttpsError('invalid-argument', 'UID and role are required');
 //   }
 
 //   try {
 //     // Update custom claims
-//     await admin.auth().setCustomUserClaims(uid, { role: role });
+//     await admin.auth().setCustomUserClaims(uid, { role });
 
-//     // Get updated user info
-//     const userRecord = await admin.auth().getUser(uid);
+//     // Update Firestore document
+//     await db.collection('users_new').doc(uid).update({
+//       role,
+//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+//       updatedBy: auth.uid,
+//     });
 
-//     return {
-//       success: true,
-//       uid: uid,
-//       email: userRecord.email,
-//       role: role,
-//       message: 'User role updated successfully',
-//     };
+//     return { success: true, message: 'User role updated successfully' };
 //   } catch (error) {
-//     console.error('Error updating user role:', error);
-//     throw new functions.https.HttpsError('internal', error.message);
+//     throw new HttpsError('internal', error.message);
 //   }
 // });
 
 // // ============================================
 // // DELETE USER
 // // ============================================
-// exports.deleteUser = functions.https.onCall(async (data, context) => {
-//   // Verify caller is authenticated and is super admin
-//   if (!context.auth) {
-//     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+// exports.deleteUser = onCall({ cors: true }, async (request) => {
+//   const { data, auth } = request;
+
+//   if (!auth) {
+//     throw new HttpsError('unauthenticated', 'User must be authenticated');
 //   }
 
-//   const callerToken = await admin.auth().getUser(context.auth.uid);
-//   const callerClaims = callerToken.customClaims || {};
-
-//   if (callerClaims.role !== 'super_admin') {
-//     throw new functions.https.HttpsError(
-//       'permission-denied',
-//       'Only super admins can delete users'
-//     );
+//   const callerToken = await admin.auth().getUser(auth.uid);
+//   if (callerToken.customClaims?.role !== 'super_admin') {
+//     throw new HttpsError('permission-denied', 'Only super admins can delete users');
 //   }
 
-//   const { uid } = data;
-
-//   if (!uid) {
-//     throw new functions.https.HttpsError('invalid-argument', 'UID is required');
-//   }
-
-//   // Prevent deleting self
-//   if (uid === context.auth.uid) {
-//     throw new functions.https.HttpsError(
-//       'permission-denied',
-//       'Cannot delete your own account'
-//     );
+//   if (data.uid === auth.uid) {
+//     throw new HttpsError('permission-denied', 'Cannot delete your own account');
 //   }
 
 //   try {
-//     // Get user info before deletion
-//     const userRecord = await admin.auth().getUser(uid);
-//     const email = userRecord.email;
+//     // Delete from Firebase Auth
+//     await admin.auth().deleteUser(data.uid);
 
-//     // Delete user
-//     await admin.auth().deleteUser(uid);
+//     // Delete from Firestore
+//     await db.collection('users_new').doc(data.uid).delete();
 
-//     return {
-//       success: true,
-//       uid: uid,
-//       email: email,
-//       message: 'User deleted successfully',
-//     };
+//     return { success: true, message: 'User deleted successfully' };
 //   } catch (error) {
-//     console.error('Error deleting user:', error);
-//     throw new functions.https.HttpsError('internal', error.message);
+//     throw new HttpsError('internal', error.message);
 //   }
 // });
 
 // // ============================================
 // // LIST ALL ADMIN USERS
 // // ============================================
-// exports.listAdminUsers = functions.https.onCall(async (data, context) => {
-//   // Verify caller is authenticated and is super admin
-//   if (!context.auth) {
-//     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+// exports.listAdminUsers = onCall({ cors: true }, async (request) => {
+//   const { auth } = request;
+
+//   if (!auth) {
+//     throw new HttpsError('unauthenticated', 'User must be authenticated');
 //   }
 
-//   const callerToken = await admin.auth().getUser(context.auth.uid);
-//   const callerClaims = callerToken.customClaims || {};
-
-//   if (callerClaims.role !== 'super_admin') {
-//     throw new functions.https.HttpsError(
-//       'permission-denied',
-//       'Only super admins can list users'
-//     );
+//   const callerToken = await admin.auth().getUser(auth.uid);
+//   if (callerToken.customClaims?.role !== 'super_admin') {
+//     throw new HttpsError('permission-denied', 'Only super admins can list users');
 //   }
 
 //   try {
-//     const listUsersResult = await admin.auth().listUsers(1000); // Max 1000 users
-
-//     const users = listUsersResult.users.map(user => ({
-//       uid: user.uid,
-//       email: user.email,
-//       role: user.customClaims?.role || null,
-//       emailVerified: user.emailVerified,
-//       disabled: user.disabled,
-//       creationTime: user.metadata.creationTime,
-//       lastSignInTime: user.metadata.lastSignInTime,
+//     const snapshot = await db.collection('users_new').orderBy('createdAt', 'desc').get();
+//     const users = snapshot.docs.map(doc => ({
+//       uid: doc.id,
+//       ...doc.data(),
+//       // Convert Firestore timestamps to ISO strings for JSON serialization
+//       createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || null,
+//       updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || null,
 //     }));
 
-//     // Filter only users with roles (admin users)
-//     const adminUsers = users.filter(user => user.role);
-
-//     return {
-//       success: true,
-//       users: adminUsers,
-//       count: adminUsers.length,
-//     };
+//     return { success: true, users };
 //   } catch (error) {
-//     console.error('Error listing users:', error);
-//     throw new functions.https.HttpsError('internal', error.message);
+//     throw new HttpsError('internal', error.message);
 //   }
 // });
+
+// // ============================================
+// // TOGGLE USER DISABLED STATUS
+// // ============================================
+// exports.toggleUserDisabled = onCall({ cors: true }, async (request) => {
+//   const { data, auth } = request;
+
+//   if (!auth) {
+//     throw new HttpsError('unauthenticated', 'User must be authenticated');
+//   }
+
+//   const callerToken = await admin.auth().getUser(auth.uid);
+//   if (callerToken.customClaims?.role !== 'super_admin') {
+//     throw new HttpsError('permission-denied', 'Only super admins can disable users');
+//   }
+
+//   const { uid, disabled } = data;
+
+//   try {
+//     // Update Firebase Auth
+//     await admin.auth().updateUser(uid, { disabled });
+
+//     // Update Firestore
+//     await db.collection('users_new').doc(uid).update({
+//       disabled,
+//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+//     });
+
+//     return { success: true, disabled };
+//   } catch (error) {
+//     throw new HttpsError('internal', error.message);
+//   }
+// });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
@@ -232,35 +257,64 @@ const admin = require('firebase-admin');
 
 admin.initializeApp();
 
+const db = admin.firestore();
+
+// Helper — get super admin UID from env (set in Firebase Functions config or .env)
+// We protect by UID (not email) so it can't be spoofed
+const SUPER_ADMIN_UID = process.env.SUPER_ADMIN_UID;
+
 // ============================================
 // CREATE USER WITH ROLE
 // ============================================
 exports.createUserWithRole = onCall({ cors: true }, async (request) => {
   const { data, auth } = request;
 
-  if (!auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
-  }
+  if (!auth) throw new HttpsError('unauthenticated', 'User must be authenticated');
 
   const callerToken = await admin.auth().getUser(auth.uid);
   const callerClaims = callerToken.customClaims || {};
-
   if (callerClaims.role !== 'super_admin') {
     throw new HttpsError('permission-denied', 'Only super admins can create users');
   }
 
-  const { email, password, role } = data;
-
+  const { email, password, role, displayName } = data;
   if (!email || !password || !role) {
     throw new HttpsError('invalid-argument', 'Email, password, and role are required');
   }
+  if (!['super_admin', 'admin', 'editor'].includes(role)) {
+    throw new HttpsError('invalid-argument', 'Invalid role');
+  }
+  if (password.length < 6) {
+    throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
+  }
 
   try {
-    const userRecord = await admin.auth().createUser({ email, password });
+    let userRecord;
+    try {
+      userRecord = await admin.auth().createUser({ email, password });
+    } catch (authError) {
+      if (authError.code === 'auth/email-already-exists') {
+        userRecord = await admin.auth().getUserByEmail(email);
+      } else {
+        throw authError;
+      }
+    }
+
     await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+
+    await db.collection('users_new').doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email,
+      role,
+      displayName: displayName || '',
+      disabled: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: auth.uid,
+    }, { merge: true });
 
     return { success: true, uid: userRecord.uid, email, role };
   } catch (error) {
+    console.error('Error creating user:', error);
     throw new HttpsError('internal', error.message);
   }
 });
@@ -271,9 +325,7 @@ exports.createUserWithRole = onCall({ cors: true }, async (request) => {
 exports.updateUserRole = onCall({ cors: true }, async (request) => {
   const { data, auth } = request;
 
-  if (!auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
-  }
+  if (!auth) throw new HttpsError('unauthenticated', 'User must be authenticated');
 
   const callerToken = await admin.auth().getUser(auth.uid);
   if (callerToken.customClaims?.role !== 'super_admin') {
@@ -281,8 +333,20 @@ exports.updateUserRole = onCall({ cors: true }, async (request) => {
   }
 
   const { uid, role } = data;
+  if (!uid || !role) throw new HttpsError('invalid-argument', 'UID and role are required');
+
+  // LAYER 1: Block role change on super admin
+  if (SUPER_ADMIN_UID && uid === SUPER_ADMIN_UID) {
+    throw new HttpsError('permission-denied', 'The super admin role cannot be changed.');
+  }
+
   try {
     await admin.auth().setCustomUserClaims(uid, { role });
+    await db.collection('users_new').doc(uid).update({
+      role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: auth.uid,
+    });
     return { success: true, message: 'User role updated successfully' };
   } catch (error) {
     throw new HttpsError('internal', error.message);
@@ -295,9 +359,7 @@ exports.updateUserRole = onCall({ cors: true }, async (request) => {
 exports.deleteUser = onCall({ cors: true }, async (request) => {
   const { data, auth } = request;
 
-  if (!auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
-  }
+  if (!auth) throw new HttpsError('unauthenticated', 'User must be authenticated');
 
   const callerToken = await admin.auth().getUser(auth.uid);
   if (callerToken.customClaims?.role !== 'super_admin') {
@@ -308,8 +370,14 @@ exports.deleteUser = onCall({ cors: true }, async (request) => {
     throw new HttpsError('permission-denied', 'Cannot delete your own account');
   }
 
+  // LAYER 1: Block deletion of super admin UID entirely
+  if (SUPER_ADMIN_UID && data.uid === SUPER_ADMIN_UID) {
+    throw new HttpsError('permission-denied', 'The super admin account cannot be deleted.');
+  }
+
   try {
     await admin.auth().deleteUser(data.uid);
+    await db.collection('users_new').doc(data.uid).delete();
     return { success: true, message: 'User deleted successfully' };
   } catch (error) {
     throw new HttpsError('internal', error.message);
@@ -322,9 +390,7 @@ exports.deleteUser = onCall({ cors: true }, async (request) => {
 exports.listAdminUsers = onCall({ cors: true }, async (request) => {
   const { auth } = request;
 
-  if (!auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
-  }
+  if (!auth) throw new HttpsError('unauthenticated', 'User must be authenticated');
 
   const callerToken = await admin.auth().getUser(auth.uid);
   if (callerToken.customClaims?.role !== 'super_admin') {
@@ -332,17 +398,45 @@ exports.listAdminUsers = onCall({ cors: true }, async (request) => {
   }
 
   try {
-    const listUsersResult = await admin.auth().listUsers(1000);
-    const adminUsers = listUsersResult.users
-      .map(user => ({
-        uid: user.uid,
-        email: user.email,
-        role: user.customClaims?.role || null,
-        lastSignInTime: user.metadata.lastSignInTime,
-      }))
-      .filter(user => user.role);
+    const snapshot = await db.collection('users_new').orderBy('createdAt', 'desc').get();
+    const users = snapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || null,
+      updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || null,
+    }));
+    return { success: true, users };
+  } catch (error) {
+    throw new HttpsError('internal', error.message);
+  }
+});
 
-    return { success: true, users: adminUsers };
+// ============================================
+// TOGGLE USER DISABLED STATUS
+// ============================================
+exports.toggleUserDisabled = onCall({ cors: true }, async (request) => {
+  const { data, auth } = request;
+
+  if (!auth) throw new HttpsError('unauthenticated', 'User must be authenticated');
+
+  const callerToken = await admin.auth().getUser(auth.uid);
+  if (callerToken.customClaims?.role !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Only super admins can disable users');
+  }
+
+  // Also block disabling the super admin
+  if (SUPER_ADMIN_UID && data.uid === SUPER_ADMIN_UID) {
+    throw new HttpsError('permission-denied', 'The super admin account cannot be disabled.');
+  }
+
+  const { uid, disabled } = data;
+  try {
+    await admin.auth().updateUser(uid, { disabled });
+    await db.collection('users_new').doc(uid).update({
+      disabled,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true, disabled };
   } catch (error) {
     throw new HttpsError('internal', error.message);
   }
