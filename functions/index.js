@@ -883,6 +883,13 @@ function reconstructServiceData(serviceData) {
     d.categoryref = db.collection('categories_new').doc(d.categoryref);
   }
 
+  // categoryref_new: array of plain string IDs → array of DocumentReferences
+  if (Array.isArray(d.categoryref_new)) {
+    d.categoryref_new = d.categoryref_new.map(id =>
+      typeof id === 'string' ? db.collection('categories_new').doc(id) : id
+    );
+  }
+
   LANGS.forEach(l => {
     // latlng: {lat, lng} → GeoPoint
     const ll = d[`latlng_${l}`];
