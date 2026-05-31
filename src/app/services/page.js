@@ -64,20 +64,17 @@ function emptyForm() {
     f[`expiredate_${l}`]    = '';
     f[`sortingorder_${l}`]  = '';
     f[`contract_paid_${l}`] = false;
-    // dd1–dd6
     for (let d = 1; d <= 6; d++) {
       f[`dd${d}_${l}`]     = '';
       f[`dd${d}text_${l}`] = '';
     }
-    // dd_X — array of {icon_X, value_X}
     f[`dd_${l}`] = [];
-    // tags_X_dd — array of {dd1Values: string[], tagData: string}
     f[`tags_${l}_dd`] = [];
   });
   f.categoryref     = '';
-  f.categoryref_new = []; // array of category IDs
-  f.payment_info    = []; // array of per-lang payment maps
-  f.details         = []; // array of {title_X, detail_X} per lang
+  f.categoryref_new = [];
+  f.payment_info    = [];
+  f.details         = [];
   PLATFORMS.forEach(p => { f[`${p.key}data`] = []; });
   return f;
 }
@@ -110,7 +107,6 @@ function serviceToForm(service) {
       f[`dd${d}_${l}`]     = toStringArray(service[`dd${d}_${l}`]).join(', ');
       f[`dd${d}text_${l}`] = service[`dd${d}text_${l}`] || '';
     }
-    // dd_X — array of maps
     const ddArr = service[`dd_${l}`];
     if (ddArr) {
       const entries = Array.isArray(ddArr) ? ddArr : Object.values(ddArr);
@@ -119,7 +115,6 @@ function serviceToForm(service) {
         [`value_${l}`]: e[`value_${l}`] || '',
       }));
     }
-    // tags_X_dd — array of {dd1Values, tagData}
     const tdd = service[`tags_${l}_dd`];
     if (tdd) {
       const entries = Array.isArray(tdd) ? tdd : Object.values(tdd);
@@ -132,14 +127,12 @@ function serviceToForm(service) {
 
   f.categoryref = extractCategoryId(service.categoryref);
 
-  // categoryref_new — array of doc refs → array of IDs
   const crn = service.categoryref_new;
   if (crn) {
     const arr = Array.isArray(crn) ? crn : Object.values(crn);
     f.categoryref_new = arr.map(extractCategoryId).filter(Boolean);
   }
 
-  // payment_info
   const pi = service.payment_info;
   if (pi) {
     const entries = Array.isArray(pi) ? pi : Object.values(pi);
@@ -155,7 +148,6 @@ function serviceToForm(service) {
     });
   }
 
-  // details
   const det = service.details;
   if (det) {
     const entries = Array.isArray(det) ? det : Object.values(det);
@@ -169,7 +161,6 @@ function serviceToForm(service) {
     });
   }
 
-  // Contact platforms
   PLATFORMS.forEach(p => {
     const raw = service[`${p.key}data`];
     if (!raw) { f[`${p.key}data`] = []; return; }
@@ -203,7 +194,6 @@ function formToServiceData(f) {
     data[`contract_paid_${l}`] = f[`contract_paid_${l}`] ?? false;
     data[`sortingorder_${l}`]  = f[`sortingorder_${l}`] !== '' ? Number(f[`sortingorder_${l}`]) : null;
 
-    // dates → {seconds, nanoseconds} — Cloud Function reconstructs as Timestamp
     const toTs = (str) => {
       if (!str) return null;
       const d = new Date(str);
@@ -212,41 +202,32 @@ function formToServiceData(f) {
     data[`createddate_${l}`] = toTs(f[`createddate_${l}`]);
     data[`expiredate_${l}`]  = toTs(f[`expiredate_${l}`]);
 
-    // arrays
     data[`search_${l}`]  = f[`search_${l}`].split(',').map(s => s.trim()).filter(Boolean);
     data[`tags_${l}`]    = f[`tags_${l}`].split(',').map(s => s.trim()).filter(Boolean);
     data[`gallery_${l}`] = f[`gallery_${l}`].split('\n').map(s => s.trim()).filter(Boolean);
     data[`info_${l}`]    = f[`info_${l}`].split('\n').map(s => s.trim()).filter(Boolean);
 
-    // dd1–dd6
     for (let d = 1; d <= 6; d++) {
       data[`dd${d}_${l}`]     = f[`dd${d}_${l}`].split(',').map(s => s.trim()).filter(Boolean);
       data[`dd${d}text_${l}`] = f[`dd${d}text_${l}`];
     }
 
-    // latlng → {lat, lng} — Cloud Function reconstructs as GeoPoint
     const lat = parseFloat(f[`latlng_${l}`]?.lat);
     const lng = parseFloat(f[`latlng_${l}`]?.lng);
     data[`latlng_${l}`] = !isNaN(lat) && !isNaN(lng) ? { lat, lng } : null;
 
-    // dd_X — array of maps
     data[`dd_${l}`] = (f[`dd_${l}`] || [])
       .filter(e => e[`value_${l}`]?.trim())
       .map(e => ({ [`icon_${l}`]: e[`icon_${l}`] || '', [`value_${l}`]: e[`value_${l}`] || '' }));
 
-    // tags_X_dd — array of {dd1Values, tagData}
     data[`tags_${l}_dd`] = (f[`tags_${l}_dd`] || [])
       .filter(e => e.tagData?.trim() || e.dd1Values?.length)
       .map(e => ({ dd1Values: e.dd1Values || [], tagData: e.tagData || '' }));
   });
 
-  // categoryref → plain string ID (Cloud Function makes it a DocumentReference)
-  data.categoryref = f.categoryref || null;
-
-  // categoryref_new → array of plain string IDs
+  data.categoryref     = f.categoryref || null;
   data.categoryref_new = (f.categoryref_new || []).filter(Boolean);
 
-  // payment_info
   data.payment_info = (f.payment_info || []).map(e => {
     const entry = {};
     LANGS.forEach(l => {
@@ -258,7 +239,6 @@ function formToServiceData(f) {
     return entry;
   });
 
-  // details
   data.details = (f.details || []).map(e => {
     const entry = {};
     LANGS.forEach(l => {
@@ -268,7 +248,6 @@ function formToServiceData(f) {
     return entry;
   });
 
-  // Contact platforms
   PLATFORMS.forEach(p => {
     const entries = f[`${p.key}data`] || [];
     data[`${p.key}data`] = entries.map(entry => {
@@ -301,7 +280,6 @@ function Section({ title, children, defaultOpen = false }) {
   );
 }
 
-// Contact platforms editor (unchanged logic)
 function ContactEntryEditor({ platform, entries, onChange }) {
   const addEntry = () => {
     const e = {};
@@ -349,7 +327,6 @@ function ContactEntryEditor({ platform, entries, onChange }) {
   );
 }
 
-// dd_X editor (icon + value per language)
 function DdArrayEditor({ lang, entries, onChange }) {
   const add    = () => onChange([...entries, { [`icon_${lang}`]: '', [`value_${lang}`]: '' }]);
   const remove = (i) => onChange(entries.filter((_, idx) => idx !== i));
@@ -370,13 +347,14 @@ function DdArrayEditor({ lang, entries, onChange }) {
   );
 }
 
-// tags_X_dd editor — tagData + dd1Values multi-select
-function TagsDdEditor({ lang, entries, onChange, dd1Options }) {
+// ── UPDATED: tags_X_dd editor — picks from dd_* values (icon + value) per lang ─
+function TagsDdEditor({ lang, entries, onChange, ddOptions }) {
+  // ddOptions: array of {icon, value} objects built from dd_lang entries across all services
   const add    = () => onChange([...entries, { dd1Values: [], tagData: '' }]);
   const remove = (i) => onChange(entries.filter((_, idx) => idx !== i));
   const update = (i, field, val) => onChange(entries.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
 
-  const toggleDd1Value = (entryIdx, val) => {
+  const toggleValue = (entryIdx, val) => {
     const current = entries[entryIdx].dd1Values || [];
     const next = current.includes(val) ? current.filter(v => v !== val) : [...current, val];
     update(entryIdx, 'dd1Values', next);
@@ -395,32 +373,47 @@ function TagsDdEditor({ lang, entries, onChange, dd1Options }) {
             <input type="text" value={entry.tagData || ''} onChange={e => update(i, 'tagData', e.target.value)} className="input text-sm" placeholder="Tag data value" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">DD1 Values <span className="text-gray-400">(select from dd1 options)</span></label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Subcategory Values <span className="text-gray-400">(select from dd_{lang} entries)</span>
+            </label>
             {/* Selected chips */}
             {(entry.dd1Values || []).length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
-                {(entry.dd1Values || []).map(v => (
-                  <span key={v} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                    {v}
-                    <button type="button" onClick={() => toggleDd1Value(i, v)} className="hover:text-red-500"><FiX size={10} /></button>
-                  </span>
-                ))}
+                {(entry.dd1Values || []).map(v => {
+                  const opt = ddOptions.find(o => o.value === v);
+                  return (
+                    <span key={v} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                      {opt?.icon && (
+                        opt.icon.startsWith('http')
+                          ? <img src={opt.icon} alt="" className="w-3 h-3 rounded-sm object-cover" />
+                          : <span>{opt.icon}</span>
+                      )}
+                      {v}
+                      <button type="button" onClick={() => toggleValue(i, v)} className="hover:text-red-500"><FiX size={10} /></button>
+                    </span>
+                  );
+                })}
               </div>
             )}
-            {/* Dropdown to add more */}
-            {dd1Options.length > 0 ? (
+            {ddOptions.length > 0 ? (
               <select
                 value=""
-                onChange={e => { if (e.target.value) toggleDd1Value(i, e.target.value); }}
+                onChange={e => { if (e.target.value) toggleValue(i, e.target.value); }}
                 className="select text-sm"
               >
-                <option value="">+ Select DD1 value…</option>
-                {dd1Options.filter(o => !(entry.dd1Values || []).includes(o)).map(o => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
+                <option value="">+ Select subcategory value…</option>
+                {ddOptions
+                  .filter(o => !(entry.dd1Values || []).includes(o.value))
+                  .map(o => (
+                    <option key={o.value} value={o.value}>
+                      {o.icon && !o.icon.startsWith('http') ? `${o.icon} ` : ''}{o.value}
+                    </option>
+                  ))}
               </select>
             ) : (
-              <p className="text-xs text-gray-400">No DD1 options available (add dd1 values first)</p>
+              <p className="text-xs text-gray-400">
+                No dd_{lang} options available — add subcategory entries in the DD Array section first
+              </p>
             )}
           </div>
         </div>
@@ -430,7 +423,6 @@ function TagsDdEditor({ lang, entries, onChange, dd1Options }) {
   );
 }
 
-// payment_info editor — same pattern as phonedata but with per-lang date/url/amount/duration
 function PaymentInfoEditor({ entries, onChange }) {
   const addEntry = () => {
     const e = {};
@@ -483,7 +475,6 @@ function PaymentInfoEditor({ entries, onChange }) {
   );
 }
 
-// details editor — title + detail per lang
 function DetailsEditor({ entries, onChange }) {
   const add    = () => {
     const e = {};
@@ -524,23 +515,25 @@ function DetailsEditor({ entries, onChange }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function ServicesPage() {
   const { canAccess, canAccessService } = useAuth();
-  const [services, setServices]           = useState([]);
-  const [categories, setCategories]       = useState([]);
-  const [filteredServices, setFilteredServices] = useState([]);
-  const [visibleCount, setVisibleCount]   = useState(PAGE_SIZE);  // infinite scroll
-  const [loading, setLoading]             = useState(true);
-  const [saving, setSaving]               = useState(false);
-  const [searchTerm, setSearchTerm]       = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [ddSelections, setDdSelections]   = useState({ dd1: '', dd2: '', dd3: '', dd4: '', dd5: '', dd6: '' });
-  const [showModal, setShowModal]         = useState(false);
-  const [editingService, setEditingService] = useState(null);
-  const [selectedServices, setSelectedServices] = useState([]);
-  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-  const [formData, setFormData]           = useState(emptyForm());
+  const [services, setServices]                   = useState([]);
+  const [categories, setCategories]               = useState([]);
+  const [filteredServices, setFilteredServices]   = useState([]);
+  const [visibleCount, setVisibleCount]           = useState(PAGE_SIZE);
+  const [loading, setLoading]                     = useState(true);
+  const [saving, setSaving]                       = useState(false);
+  const [searchTerm, setSearchTerm]               = useState('');
+  const [categoryFilter, setCategoryFilter]       = useState('');
+  // subcategory filter: { sor: '', bad: '', ar: '', en: '' }
+  const [subCatFilter, setSubCatFilter]           = useState({ sor: '', bad: '', ar: '', en: '' });
+  const [ddSelections, setDdSelections]           = useState({ dd1: '', dd2: '', dd3: '', dd4: '', dd5: '', dd6: '' });
+  const [showModal, setShowModal]                 = useState(false);
+  const [editingService, setEditingService]       = useState(null);
+  const [selectedServices, setSelectedServices]   = useState([]);
+  const [confirmDialog, setConfirmDialog]         = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const [formData, setFormData]                   = useState(emptyForm());
   const loaderRef = useRef(null);
 
-  // ── Infinite scroll ──────────────────────────────────────────────────────────
+  // ── Infinite scroll ────────────────────────────────────────────────────────
   useEffect(() => {
     const el = loaderRef.current;
     if (!el) return;
@@ -552,11 +545,10 @@ export default function ServicesPage() {
     return () => observer.disconnect();
   }, [filteredServices]);
 
-  // Reset visible count when filters change
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchTerm, categoryFilter, ddSelections]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchTerm, categoryFilter, subCatFilter, ddSelections]);
 
   useEffect(() => { if (canAccess('services_new')) loadData(); }, []);
-  useEffect(() => { filterServices(); }, [searchTerm, categoryFilter, ddSelections, services]);
+  useEffect(() => { filterServices(); }, [searchTerm, categoryFilter, subCatFilter, ddSelections, services]);
 
   const loadData = async () => {
     try {
@@ -571,13 +563,53 @@ export default function ServicesPage() {
     }
   };
 
-  // ── Filtering ────────────────────────────────────────────────────────────────
+  // ── Helper: get pool filtered only by category (for subcategory option building) ──
+  const getCategoryPool = (pool = services) => {
+    if (!categoryFilter) return pool;
+    return pool.filter(s => {
+      const ref = s.categoryref;
+      if (!ref) return false;
+      if (typeof ref === 'object' && ref.id) return ref.id === categoryFilter;
+      if (typeof ref === 'object' && ref.path) return ref.path.split('/').pop() === categoryFilter;
+      if (typeof ref === 'string') return (ref.includes('/') ? ref.split('/').pop() : ref) === categoryFilter;
+      return false;
+    });
+  };
+
+  // ── Build subcategory options per language from dd_* arrays ──────────────────
+  // Returns Map<lang, Array<{icon, value}>> — only langs that have at least one non-empty entry
+  const getSubCatOptions = () => {
+    const pool = getCategoryPool();
+    const result = {};
+    LANGS.forEach(l => {
+      const seen = new Set();
+      const opts = [];
+      pool.forEach(s => {
+        const arr = s[`dd_${l}`];
+        if (!arr) return;
+        const entries = Array.isArray(arr) ? arr : Object.values(arr);
+        entries.forEach(e => {
+          const val = e[`value_${l}`]?.trim();
+          if (val && !seen.has(val)) {
+            seen.add(val);
+            opts.push({ icon: e[`icon_${l}`] || '', value: val });
+          }
+        });
+      });
+      if (opts.length > 0) result[l] = opts;
+    });
+    return result;
+  };
+
+  // ── Filtering ──────────────────────────────────────────────────────────────
   const filterServices = () => {
     let filtered = services;
+
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(s => LANGS.some(l => s[`name_${l}`]?.toLowerCase().includes(term)));
     }
+
     if (categoryFilter) {
       filtered = filtered.filter(s => {
         const ref = s.categoryref;
@@ -588,23 +620,45 @@ export default function ServicesPage() {
         return false;
       });
     }
+
+    // Apply subcategory filters — each lang filter independently checked against dd_lang array
+    LANGS.forEach(l => {
+      if (subCatFilter[l]) {
+        filtered = filtered.filter(s => {
+          const arr = s[`dd_${l}`];
+          if (!arr) return false;
+          const entries = Array.isArray(arr) ? arr : Object.values(arr);
+          return entries.some(e => e[`value_${l}`]?.trim() === subCatFilter[l]);
+        });
+      }
+    });
+
+    // dd1–dd6 filters: only apply to services that passed subcategory filter
     for (let d = 1; d <= 6; d++) {
       if (ddSelections[`dd${d}`]) {
         filtered = filtered.filter(s => toStringArray(s[`dd${d}_sor`]).includes(ddSelections[`dd${d}`]));
       }
     }
+
     setFilteredServices(filtered);
   };
 
+  // ── dd1–dd6 options: narrowed by subcategory filter first ─────────────────
   const getDdOptions = (level) => {
-    let pool = services;
-    if (categoryFilter) pool = pool.filter(s => {
-      const ref = s.categoryref;
-      if (!ref) return false;
-      if (typeof ref === 'object' && ref.id) return ref.id === categoryFilter;
-      if (typeof ref === 'string') return (ref.includes('/') ? ref.split('/').pop() : ref) === categoryFilter;
-      return false;
+    let pool = getCategoryPool();
+
+    // Narrow by active subcategory filters
+    LANGS.forEach(l => {
+      if (subCatFilter[l]) {
+        pool = pool.filter(s => {
+          const arr = s[`dd_${l}`];
+          if (!arr) return false;
+          const entries = Array.isArray(arr) ? arr : Object.values(arr);
+          return entries.some(e => e[`value_${l}`]?.trim() === subCatFilter[l]);
+        });
+      }
     });
+
     for (let i = 1; i < level; i++) {
       if (ddSelections[`dd${i}`]) pool = pool.filter(s => toStringArray(s[`dd${i}_sor`]).includes(ddSelections[`dd${i}`]));
     }
@@ -619,12 +673,46 @@ export default function ServicesPage() {
     setDdSelections(next);
   };
 
-  const clearDdFilters = () => setDdSelections({ dd1: '', dd2: '', dd3: '', dd4: '', dd5: '', dd6: '' });
+  const clearDdFilters  = () => setDdSelections({ dd1: '', dd2: '', dd3: '', dd4: '', dd5: '', dd6: '' });
+  const clearSubCat     = () => setSubCatFilter({ sor: '', bad: '', ar: '', en: '' });
+  const clearAllFilters = () => { clearDdFilters(); clearSubCat(); };
 
-  // ── DD1 options for tags_dd editor (computed from services dd1_sor values) ───
-  const dd1OptionsForTags = [...new Set(services.flatMap(s => toStringArray(s.dd1_sor)))].sort();
+  const handleCategoryChange = (val) => {
+    setCategoryFilter(val);
+    clearAllFilters();
+  };
 
-  // ── Modal ────────────────────────────────────────────────────────────────────
+  const hasActiveSubCat = Object.values(subCatFilter).some(Boolean);
+  const hasActiveDd     = Object.values(ddSelections).some(Boolean);
+
+  // ── Subcategory options (memoised on services + categoryFilter) ───────────
+  const subCatOptions = getSubCatOptions();
+  const subCatLangs   = Object.keys(subCatOptions); // only langs with data
+
+  // ── dd_* options for TagsDdEditor in modal — built from current form's own dd_lang entries ──
+  // (so you select from the values you're adding on this very service, plus all services' values)
+  const getDdOptionsForModal = (lang) => {
+    const seen = new Set();
+    const opts = [];
+    // From all services
+    services.forEach(s => {
+      const arr = s[`dd_${lang}`];
+      if (!arr) return;
+      const entries = Array.isArray(arr) ? arr : Object.values(arr);
+      entries.forEach(e => {
+        const val = e[`value_${lang}`]?.trim();
+        if (val && !seen.has(val)) { seen.add(val); opts.push({ icon: e[`icon_${lang}`] || '', value: val }); }
+      });
+    });
+    // Also include current form's own dd_lang entries (not yet saved)
+    (formData[`dd_${lang}`] || []).forEach(e => {
+      const val = e[`value_${lang}`]?.trim();
+      if (val && !seen.has(val)) { seen.add(val); opts.push({ icon: e[`icon_${lang}`] || '', value: val }); }
+    });
+    return opts;
+  };
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
   const handleOpenModal = (service = null) => {
     setEditingService(service || null);
     setFormData(service ? serviceToForm(service) : emptyForm());
@@ -690,7 +778,6 @@ export default function ServicesPage() {
     });
   };
 
-  // categoryref_new helpers
   const toggleCategoryNew = (catId) => {
     const current = formData.categoryref_new || [];
     const next = current.includes(catId) ? current.filter(id => id !== catId) : [...current, catId];
@@ -705,6 +792,9 @@ export default function ServicesPage() {
 
   const visibleServices = filteredServices.slice(0, visibleCount);
   const hasMore = visibleCount < filteredServices.length;
+
+  // Language label map for UI display
+  const LANG_LABELS = { sor: 'Sorani', bad: 'Badini', ar: 'Arabic', en: 'English' };
 
   return (
     <ProtectedRoute>
@@ -725,16 +815,23 @@ export default function ServicesPage() {
 
           {/* Filters */}
           <div className="card mb-6 space-y-3">
+            {/* Row 1: search + category + bulk delete */}
             <div className="flex flex-col lg:flex-row gap-3 items-center">
               <div className="relative w-full lg:w-72 shrink-0">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input type="text" placeholder="Search services..." value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)} className="input pl-10 pr-10 w-full" />
-                {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><FiX size={16} /></button>}
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <FiX size={16} />
+                  </button>
+                )}
               </div>
-              <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); clearDdFilters(); }} className="select w-full lg:flex-1">
+              <select value={categoryFilter} onChange={e => handleCategoryChange(e.target.value)} className="select w-full lg:flex-1">
                 <option value="">All Categories</option>
-                {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name_sor || cat.name_en || cat.id}</option>)}
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name_sor || cat.name_en || cat.id}</option>
+                ))}
               </select>
               {selectedServices.length > 0 && (
                 <button onClick={handleBulkDelete} className="btn btn-danger flex items-center gap-2 whitespace-nowrap">
@@ -743,7 +840,63 @@ export default function ServicesPage() {
               )}
             </div>
 
-            {/* Cascading dd filters */}
+            {/* ── Subcategory (dd_*) dropdowns — only shown when options exist ── */}
+            {subCatLangs.length > 0 && (
+              <div className="border border-gray-100 rounded-lg p-3 bg-gray-50 space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Subcategory</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {subCatLangs.map(l => {
+                    const opts = subCatOptions[l];
+                    const selected = subCatFilter[l];
+                    return (
+                      <div key={l} className="relative">
+                        <label className="block text-xs text-gray-400 mb-1">{LANG_LABELS[l]}</label>
+                        <div className="relative">
+                          <select
+                            value={selected}
+                            onChange={e => {
+                              setSubCatFilter(prev => ({ ...prev, [l]: e.target.value }));
+                              // Reset dd1–dd6 when subcategory changes
+                              clearDdFilters();
+                            }}
+                            className={`select w-full text-sm ${selected ? 'border-primary font-medium' : ''}`}
+                          >
+                            <option value="">All</option>
+                            {opts.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.icon && !opt.icon.startsWith('http') ? `${opt.icon} ` : ''}
+                                {opt.value}
+                              </option>
+                            ))}
+                          </select>
+                          {selected && (
+                            <button
+                              onClick={() => { setSubCatFilter(prev => ({ ...prev, [l]: '' })); clearDdFilters(); }}
+                              className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <FiX size={13} />
+                            </button>
+                          )}
+                        </div>
+                        {/* Show icon preview when selected and icon is a URL */}
+                        {selected && subCatOptions[l]?.find(o => o.value === selected)?.icon?.startsWith('http') && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <img
+                              src={subCatOptions[l].find(o => o.value === selected).icon}
+                              alt=""
+                              className="w-4 h-4 rounded object-cover"
+                            />
+                            <span className="text-xs text-primary truncate">{selected}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Cascading dd1–dd6 filters — narrowed by subcategory selection */}
             {[1,2,3,4,5,6].map(level => {
               const parentOk = level === 1 ? true : !!ddSelections[`dd${level - 1}`];
               if (!parentOk) return null;
@@ -760,14 +913,22 @@ export default function ServicesPage() {
                       <option value="">{label ? `All ${label}` : `All (level ${level})`}</option>
                       {opts.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
-                    {selected && <button onClick={() => handleDdSelect(level, '')} className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><FiX size={14} /></button>}
+                    {selected && (
+                      <button onClick={() => handleDdSelect(level, '')} className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <FiX size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
-            {Object.values(ddSelections).some(Boolean) && (
+
+            {/* Clear all button */}
+            {(hasActiveSubCat || hasActiveDd) && (
               <div className="flex justify-end">
-                <button onClick={clearDdFilters} className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1"><FiX size={12} /> Clear all filters</button>
+                <button onClick={clearAllFilters} className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1">
+                  <FiX size={12} /> Clear all filters
+                </button>
               </div>
             )}
           </div>
@@ -776,7 +937,7 @@ export default function ServicesPage() {
           {!loading && (
             <div className="flex items-center gap-3 mb-4">
               <p className="text-sm text-gray-500 shrink-0">
-                {searchTerm || categoryFilter || Object.values(ddSelections).some(Boolean)
+                {searchTerm || categoryFilter || hasActiveSubCat || hasActiveDd
                   ? `${filteredServices.length} of ${services.length} service${services.length !== 1 ? 's' : ''}`
                   : `${services.length} service${services.length !== 1 ? 's' : ''}`}
                 {hasMore && <span className="text-gray-400"> · showing {visibleServices.length}</span>}
@@ -818,6 +979,28 @@ export default function ServicesPage() {
                       <h3 className="font-semibold text-gray-900">{service.name_sor || service.name_en}</h3>
                       {service.jobtitle_sor && <p className="text-sm text-gray-600">{service.jobtitle_sor}</p>}
                       {service.job_sor && <p className="text-xs text-gray-500 line-clamp-2">{service.job_sor}</p>}
+
+                      {/* Subcategory badges from dd_sor */}
+                      {(() => {
+                        const arr = service.dd_sor;
+                        if (!arr) return null;
+                        const entries = Array.isArray(arr) ? arr : Object.values(arr);
+                        const valid = entries.filter(e => e.value_sor?.trim());
+                        if (!valid.length) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {valid.map((e, i) => (
+                              <span key={i} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                {e.icon_sor?.startsWith('http')
+                                  ? <img src={e.icon_sor} alt="" className="w-3 h-3 rounded-sm object-cover" />
+                                  : e.icon_sor ? <span>{e.icon_sor}</span> : null}
+                                {e.value_sor}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {service.visibility_sor ? <FiEye className="text-green-600" size={16} /> : <FiEyeOff className="text-gray-400" size={16} />}
                         <span className="text-xs text-gray-500">Views: {service.pageview_sor || 0}</span>
@@ -833,7 +1016,6 @@ export default function ServicesPage() {
                 ))}
               </div>
 
-              {/* Infinite scroll sentinel */}
               {hasMore && (
                 <div ref={loaderRef} className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -869,7 +1051,9 @@ export default function ServicesPage() {
 
                 {/* ── Category (primary) ── */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category * <span className="text-gray-400 font-normal text-xs">(primary)</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category * <span className="text-gray-400 font-normal text-xs">(primary)</span>
+                  </label>
                   <select value={formData.categoryref} onChange={e => setField('categoryref', e.target.value)} className="select" required>
                     <option value="">Select a category</option>
                     {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name_sor || cat.name_en || cat.id}</option>)}
@@ -878,8 +1062,9 @@ export default function ServicesPage() {
 
                 {/* ── categoryref_new (multiple) ── */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Additional Categories <span className="text-gray-400 font-normal text-xs">(categoryref_new — select multiple)</span></label>
-                  {/* Selected chips */}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Categories <span className="text-gray-400 font-normal text-xs">(categoryref_new — select multiple)</span>
+                  </label>
                   {(formData.categoryref_new || []).length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                       {(formData.categoryref_new || []).map(catId => {
@@ -944,7 +1129,9 @@ export default function ServicesPage() {
                           {formData[`image_${lang}`] && <img src={formData[`image_${lang}`]} alt="Preview" className="w-24 h-24 object-cover rounded mt-2" />}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Gallery URLs ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— one per line</span></label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Gallery URLs ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— one per line</span>
+                          </label>
                           <textarea value={formData[`gallery_${lang}`]} onChange={e => setField(`gallery_${lang}`, e.target.value)} className="textarea" rows={4} placeholder={"https://image1.jpg\nhttps://image2.jpg"} />
                         </div>
                       </div>
@@ -998,15 +1185,21 @@ export default function ServicesPage() {
                     {lang => (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Search Keywords ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— comma separated</span></label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Search Keywords ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— comma separated</span>
+                          </label>
                           <input type="text" value={formData[`search_${lang}`]} onChange={e => setField(`search_${lang}`, e.target.value)} className="input" placeholder="keyword1, keyword2, keyword3" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Tags ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— comma separated</span></label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Tags ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— comma separated</span>
+                          </label>
                           <input type="text" value={formData[`tags_${lang}`]} onChange={e => setField(`tags_${lang}`, e.target.value)} className="input" placeholder="tag1, tag2, tag3" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Info Bullets ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— one per line</span></label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Info Bullets ({lang.toUpperCase()}) <span className="text-gray-400 font-normal">— one per line</span>
+                          </label>
                           <textarea value={formData[`info_${lang}`]} onChange={e => setField(`info_${lang}`, e.target.value)} className="textarea" rows={3} placeholder={"Info point 1\nInfo point 2"} />
                         </div>
                       </div>
@@ -1058,9 +1251,11 @@ export default function ServicesPage() {
                   </LanguageTabs>
                 </Section>
 
-                {/* ── dd_X (icon + value array) — NEW ── */}
-                <Section title="🏷️ DD Array (dd_sor / dd_bad / dd_ar / dd_en)">
-                  <p className="text-xs text-gray-500 mb-3">Each entry has an icon and a value, stored per language.</p>
+                {/* ── dd_X (icon + value array) ── */}
+                <Section title="🏷️ DD Array / Subcategories (dd_sor / dd_bad / dd_ar / dd_en)">
+                  <p className="text-xs text-gray-500 mb-3">
+                    These define the subcategory values shown in the list page filters. Each entry has an icon (URL or emoji) and a display value, stored per language.
+                  </p>
                   <LanguageTabs>
                     {lang => (
                       <DdArrayEditor
@@ -1072,22 +1267,24 @@ export default function ServicesPage() {
                   </LanguageTabs>
                 </Section>
 
-                {/* ── tags_X_dd — NEW ── */}
+                {/* ── tags_X_dd — picks from dd_* values ── */}
                 <Section title="🔖 Tag DD Mapping (tags_sor_dd / tags_bad_dd / tags_ar_dd / tags_en_dd)">
-                  <p className="text-xs text-gray-500 mb-3">Each entry maps DD1 filter values to a tag. DD1 values are selected from the existing dd1 options across all services.</p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Each entry maps subcategory (dd_*) values to a tag. Select values from the DD Array entries defined above or from other services.
+                  </p>
                   <LanguageTabs>
                     {lang => (
                       <TagsDdEditor
                         lang={lang}
                         entries={formData[`tags_${lang}_dd`] || []}
                         onChange={entries => setField(`tags_${lang}_dd`, entries)}
-                        dd1Options={dd1OptionsForTags}
+                        ddOptions={getDdOptionsForModal(lang)}
                       />
                     )}
                   </LanguageTabs>
                 </Section>
 
-                {/* ── Details — NEW ── */}
+                {/* ── Details ── */}
                 <Section title="📋 Details">
                   <p className="text-xs text-gray-500 mb-3">Each detail item has a title and detail text, per language.</p>
                   <DetailsEditor
@@ -1096,7 +1293,7 @@ export default function ServicesPage() {
                   />
                 </Section>
 
-                {/* ── Payment Info — NEW ── */}
+                {/* ── Payment Info ── */}
                 <Section title="💳 Payment Info">
                   <p className="text-xs text-gray-500 mb-3">Each payment entry has date, URL, amount, and duration per language.</p>
                   <PaymentInfoEditor
