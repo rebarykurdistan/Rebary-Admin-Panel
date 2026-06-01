@@ -31,7 +31,8 @@ function timestampToDateString(ts) {
   if (!ts) return '';
   try {
     const d = ts.toDate ? ts.toDate() : new Date(typeof ts === 'object' && ts.seconds != null ? ts.seconds * 1000 : ts);
-    return d.toISOString().split('T')[0];
+    // Return datetime-local format: YYYY-MM-DDTHH:mm (strips seconds/ms for input compatibility)
+    return d.toISOString().slice(0, 16);
   } catch { return ''; }
 }
 
@@ -451,7 +452,7 @@ function PaymentInfoEditor({ entries, onChange }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Date</label>
-                  <input type="date" value={entry[`date_${l}`] || ''} onChange={e => update(i, `date_${l}`, e.target.value)} className="input text-sm py-1" />
+                  <input type="datetime-local" value={entry[`date_${l}`] || ''} onChange={e => update(i, `date_${l}`, e.target.value)} className="input text-sm py-1" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">URL</label>
@@ -691,18 +692,11 @@ export default function ServicesPage() {
 
   // ── dd_* options for TagsDdEditor in modal — built from current form's own dd_lang entries ──
   // (so you select from the values you're adding on this very service, plus all services' values)
-  // NEW — scoped to formData.categoryref when set
   const getDdOptionsForModal = (lang) => {
     const seen = new Set();
     const opts = [];
-    const selectedCat = formData.categoryref;
-
-    // Filter services by selected category (if any)
-    const pool = selectedCat
-      ? services.filter(s => extractCategoryId(s.categoryref) === selectedCat)
-      : services;
-
-    pool.forEach(s => {
+    // From all services
+    services.forEach(s => {
       const arr = s[`dd_${lang}`];
       if (!arr) return;
       const entries = Array.isArray(arr) ? arr : Object.values(arr);
@@ -711,7 +705,7 @@ export default function ServicesPage() {
         if (val && !seen.has(val)) { seen.add(val); opts.push({ icon: e[`icon_${lang}`] || '', value: val }); }
       });
     });
-    // Always include current form's own dd_lang entries (not yet saved)
+    // Also include current form's own dd_lang entries (not yet saved)
     (formData[`dd_${lang}`] || []).forEach(e => {
       const val = e[`value_${lang}`]?.trim();
       if (val && !seen.has(val)) { seen.add(val); opts.push({ icon: e[`icon_${lang}`] || '', value: val }); }
@@ -1174,11 +1168,11 @@ export default function ServicesPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Created Date ({lang.toUpperCase()})</label>
-                            <input type="date" value={formData[`createddate_${lang}`]} onChange={e => setField(`createddate_${lang}`, e.target.value)} className="input" />
+                            <input type="datetime-local" value={formData[`createddate_${lang}`]} onChange={e => setField(`createddate_${lang}`, e.target.value)} className="input" />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Expire Date ({lang.toUpperCase()})</label>
-                            <input type="date" value={formData[`expiredate_${lang}`]} onChange={e => setField(`expiredate_${lang}`, e.target.value)} className="input" />
+                            <input type="datetime-local" value={formData[`expiredate_${lang}`]} onChange={e => setField(`expiredate_${lang}`, e.target.value)} className="input" />
                           </div>
                         </div>
                       </div>
