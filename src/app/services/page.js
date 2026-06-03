@@ -17,10 +17,6 @@ const functions = getFunctions(app);
 const LANGS     = ['sor', 'bad', 'ar', 'en'];
 const PAGE_SIZE = 15;
 
-// ── R2 base URL ────────────────────────────────────────────────────────────────
-// CHANGED: base URL for Cloudflare R2 JSON exports
-const R2_BASE = 'https://pub-881a1c06b6ba43b398a94343f2256cbb.r2.dev/jsfiles/services/categories';
-
 // ── Cache key builder ──────────────────────────────────────────────────────────
 function buildCacheKey(categoryId, searchTerm) {
   return `cat:${categoryId || '__all__'}`;
@@ -580,15 +576,19 @@ export default function ServicesPage() {
 
     setR2Loading(true);
     try {
-      const url      = `${R2_BASE}/${exportName}.json`;
-      const response = await fetch(url);
+      const response = await fetch(`/api/r2-proxy?file=${encodeURIComponent(exportName)}`);
       if (!response.ok) throw new Error(`R2 fetch failed: ${response.status}`);
       const json = await response.json();
 
       // JSON may be an array or an object keyed by id — normalise to array
-      const docs = Array.isArray(json)
-        ? json
-        : Object.entries(json).map(([id, data]) => ({ id, ...data }));
+      let docs;
+        if (Array.isArray(json)) {
+          docs = json;
+        } else if (Array.isArray(json.items)) {
+          docs = json.items; // ← your actual R2 format
+        } else {
+          docs = Object.entries(json).map(([id, data]) => ({ id, ...data }));
+        }
 
       r2CacheRef.current[exportName] = docs;
       setR2Docs(docs);
