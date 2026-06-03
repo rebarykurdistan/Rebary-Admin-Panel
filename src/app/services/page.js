@@ -17,12 +17,12 @@ const functions = getFunctions(app);
 const LANGS     = ['sor', 'bad', 'ar', 'en'];
 const PAGE_SIZE = 15;
 
+// ── R2 base URL ────────────────────────────────────────────────────────────────
+// CHANGED: base URL for Cloudflare R2 JSON exports
+const R2_BASE = 'https://pub-881a1c06b6ba43b398a94343f2256cbb.r2.dev/jsfiles/services/categories';
+
 // ── Cache key builder ──────────────────────────────────────────────────────────
-// Produces a stable string key from the active filter set.
-// Each unique combination of filters gets its own bucket with its own cursor.
 function buildCacheKey(categoryId, searchTerm) {
-  // Search is always client-side so the cache key only varies by category.
-  // Two different categories = two separate Firestore query streams.
   return `cat:${categoryId || '__all__'}`;
 }
 
@@ -516,7 +516,7 @@ export default function ServicesPage() {
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [categories, setCategories]             = useState([]);
-  const [displayedDocs, setDisplayedDocs]       = useState([]);  // what's shown in the grid
+  const [displayedDocs, setDisplayedDocs]       = useState([]);
   const [loading, setLoading]                   = useState(true);
   const [loadingMore, setLoadingMore]           = useState(false);
   const [saving, setSaving]                     = useState(false);
@@ -530,24 +530,85 @@ export default function ServicesPage() {
   const [selectedServices, setSelectedServices] = useState([]);
   const [confirmDialog, setConfirmDialog]       = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const [formData, setFormData]                 = useState(emptyForm());
-  const [staleBanner, setStaleBanner]           = useState(false); // "data updated, refresh?"
+  const [staleBanner, setStaleBanner]           = useState(false);
+
+  // CHANGED: R2 JSON state — full dataset for the active category, used for filtering only
+  const [r2Docs, setR2Docs]           = useState([]);   // all docs from R2 JSON for active category
+  const [r2Loading, setR2Loading]     = useState(false); // spinner while fetching R2 JSON
+  const r2CacheRef                    = useRef({});      // Map<json_export_name, doc[]> — fetch-once cache
 
   // Lock state
-  const [lockInfo, setLockInfo]       = useState(null);   // { lockedByName, expiresAt } when blocked
-  const [lockAcquired, setLockAcquired] = useState(false); // true when WE hold the lock
+  const [lockInfo, setLockInfo]         = useState(null);
+  const [lockAcquired, setLockAcquired] = useState(false);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const loaderRef        = useRef(null);
-  const metaUnsubRef     = useRef(null);  // unsubscribe for meta listener
-  const heartbeatRef     = useRef(null);  // interval id for lock heartbeat
-  const myWriteRef       = useRef(false); // true right after our own save so we skip the meta signal
-  const activeCacheKey   = useRef('');    // tracks which bucket is currently displayed
+  const metaUnsubRef     = useRef(null);
+  const heartbeatRef     = useRef(null);
+  const myWriteRef       = useRef(false);
+  const activeCacheKey   = useRef('');
 
-  // Cache: Map<cacheKey, { docs, cursor, hasMore, fetchedAt }>
-  // fetchedAt is a JS Date — compared against meta updatedAt to detect stale buckets
   const cacheRef = useRef({});
 
   const currentCacheKey = buildCacheKey(categoryFilter, searchTerm);
+
+  // ── CHANGED: Fetch R2 JSON for the selected category ──────────────────────
+  // Called whenever categoryFilter changes and a category is selected.
+  // Uses r2CacheRef so each JSON is only downloaded once per session.
+  const loadR2Docs = useCallback(async (categoryId) => {
+    // No category selected — clear R2 docs, filters will use displayedDocs
+    if (!categoryId) {
+      setR2Docs([]);
+      return;
+    }
+
+    // Find the category's json_export_name
+    const cat = categories.find(c => c.id === categoryId);
+    const exportName = cat?.json_export_name;
+
+    if (!exportName) {
+      // Category has no JSON export — fall back to displayedDocs for filtering
+      setR2Docs([]);
+      return;
+    }
+
+    // Serve from in-memory cache if already fetched
+    if (r2CacheRef.current[exportName]) {
+      setR2Docs(r2CacheRef.current[exportName]);
+      return;
+    }
+
+    setR2Loading(true);
+    try {
+      const url      = `${R2_BASE}/${exportName}.json`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`R2 fetch failed: ${response.status}`);
+      const json = await response.json();
+
+      // JSON may be an array or an object keyed by id — normalise to array
+      const docs = Array.isArray(json)
+        ? json
+        : Object.entries(json).map(([id, data]) => ({ id, ...data }));
+
+      r2CacheRef.current[exportName] = docs;
+      setR2Docs(docs);
+    } catch (err) {
+      console.warn('R2 JSON fetch failed, falling back to loaded docs for filtering:', err);
+      setR2Docs([]);
+    } finally {
+      setR2Loading(false);
+    }
+  }, [categories]); // re-run if categories list changes (e.g. initial load completes)
+
+  // ── CHANGED: Re-fetch R2 when category filter changes ─────────────────────
+  useEffect(() => {
+    loadR2Docs(categoryFilter);
+  }, [categoryFilter, loadR2Docs]);
+
+  // ── CHANGED: filter pool — prefer R2 full dataset when available ──────────
+  // When a category is selected and R2 loaded successfully → use r2Docs
+  // Otherwise fall back to whatever Firestore has paged in (displayedDocs)
+  const filterPool = categoryFilter && r2Docs.length > 0 ? r2Docs : displayedDocs;
 
   // ── Firestore fetch for one page ───────────────────────────────────────────
   const fetchPage = useCallback(async (cacheKey, categoryId, afterCursor = null) => {
@@ -556,8 +617,6 @@ export default function ServicesPage() {
       afterCursor,
       pageSize: PAGE_SIZE,
     });
-
-    // Filter to only services this admin can access
     const accessible = docs.filter(s => canAccessService(s.id, s.categoryref));
     return { docs: accessible, cursor, hasMore };
   }, [canAccessService]);
@@ -566,7 +625,6 @@ export default function ServicesPage() {
   const loadActiveBucket = useCallback(async (cacheKey, categoryId, { force = false } = {}) => {
     const existing = cacheRef.current[cacheKey];
 
-    // Serve from cache if fresh and not forced
     if (existing && existing.fetchedAt && !force) {
       setDisplayedDocs(existing.docs);
       setHasMore(existing.hasMore);
@@ -598,11 +656,8 @@ export default function ServicesPage() {
     setLoadingMore(true);
     try {
       const { docs: newDocs, cursor, hasMore } = await fetchPage(cacheKey, categoryFilter, existing.cursor);
-
-      // Merge — avoid duplicates by id
       const existingIds = new Set(existing.docs.map(d => d.id));
       const merged      = [...existing.docs, ...newDocs.filter(d => !existingIds.has(d.id))];
-
       cacheRef.current[cacheKey] = { docs: merged, cursor, hasMore, fetchedAt: existing.fetchedAt };
       setDisplayedDocs(merged);
       setHasMore(hasMore);
@@ -636,33 +691,28 @@ export default function ServicesPage() {
   useEffect(() => {
     if (!canAccess('services_new')) return;
     loadActiveBucket(currentCacheKey, categoryFilter);
-  }, [categoryFilter, canAccess]); // intentionally omit loadActiveBucket to avoid loop
+  }, [categoryFilter, canAccess]);
 
-  // ── Meta listener: watches services_new/reference for updatedAt changes ───
+  // ── Meta listener ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!canAccess('services_new')) return;
 
     metaUnsubRef.current = subscribeToServicesMeta((remoteUpdatedAt) => {
-      // If this update was triggered by our own save, skip it
       if (myWriteRef.current) {
         myWriteRef.current = false;
         return;
       }
 
-      // Mark all cache buckets whose fetchedAt is older than remoteUpdatedAt as stale
       let activeIsStale = false;
       Object.keys(cacheRef.current).forEach(key => {
         const bucket = cacheRef.current[key];
         if (bucket.fetchedAt && bucket.fetchedAt < remoteUpdatedAt) {
-          cacheRef.current[key] = { ...bucket, fetchedAt: null }; // null = stale
+          cacheRef.current[key] = { ...bucket, fetchedAt: null };
           if (key === activeCacheKey.current) activeIsStale = true;
         }
       });
 
-      if (activeIsStale) {
-        // Show a non-intrusive banner instead of auto-refreshing mid-browse
-        setStaleBanner(true);
-      }
+      if (activeIsStale) setStaleBanner(true);
     });
 
     return () => { if (metaUnsubRef.current) metaUnsubRef.current(); };
@@ -674,12 +724,9 @@ export default function ServicesPage() {
     loadActiveBucket(currentCacheKey, categoryFilter, { force: true });
   };
 
-  // ── Client-side filtering on top of fetched docs ───────────────────────────
-  // We only run client-side filters against what's already in the cache bucket.
-  // If subcat / dd filters are active we narrow the already-fetched set.
-  // Search is also client-side so zero extra reads.
+  // ── CHANGED: Client-side filtering — uses filterPool (R2 or displayedDocs) ──
   const filteredDocs = (() => {
-    let docs = displayedDocs;
+    let docs = filterPool; // CHANGED: was `displayedDocs`
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -706,13 +753,13 @@ export default function ServicesPage() {
     return docs;
   })();
 
-  // ── Subcategory options built from fetched docs ───────────────────────────
+  // ── CHANGED: Subcategory options — built from filterPool ─────────────────
   const getSubCatOptions = () => {
     const result = {};
     LANGS.forEach(l => {
       const seen = new Set();
       const opts = [];
-      displayedDocs.forEach(s => {
+      filterPool.forEach(s => { // CHANGED: was `displayedDocs`
         const arr = s[`dd_${l}`];
         if (!arr) return;
         const entries = Array.isArray(arr) ? arr : Object.values(arr);
@@ -726,8 +773,9 @@ export default function ServicesPage() {
     return result;
   };
 
+  // ── CHANGED: DD options — built from filterPool ───────────────────────────
   const getDdOptions = (level) => {
-    let pool = displayedDocs;
+    let pool = filterPool; // CHANGED: was `displayedDocs`
     LANGS.forEach(l => {
       if (subCatFilter[l]) {
         pool = pool.filter(s => {
@@ -744,7 +792,7 @@ export default function ServicesPage() {
     return [...new Set(pool.flatMap(s => toStringArray(s[`dd${level}_sor`])))].sort();
   };
 
-  const getDdLabel = (level) => displayedDocs.find(s => s[`dd${level}text_sor`])?.[`dd${level}text_sor`] || null;
+  const getDdLabel = (level) => filterPool.find(s => s[`dd${level}text_sor`])?.[`dd${level}text_sor`] || null; // CHANGED
 
   const handleDdSelect = (level, value) => {
     const next = { ...ddSelections, [`dd${level}`]: value };
@@ -789,14 +837,13 @@ export default function ServicesPage() {
     stopHeartbeat();
     heartbeatRef.current = setInterval(() => {
       renewLock(serviceId, user?.uid).catch(() => {});
-    }, 60 * 1000); // renew every 60s (well within 3-min TTL)
+    }, 60 * 1000);
   };
 
   const stopHeartbeat = () => {
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
   };
 
-  // Release lock + stop heartbeat on modal close (any path)
   const doReleaseLock = useCallback(async (serviceId) => {
     stopHeartbeat();
     if (serviceId && user?.uid) {
@@ -812,12 +859,11 @@ export default function ServicesPage() {
     setLockAcquired(false);
 
     if (service) {
-      // Try to acquire a lock
       const result = await acquireLock(service.id, user?.uid, user?.displayName || user?.email || 'Admin');
       if (!result.acquired) {
         setLockInfo({ lockedByName: result.lockedByName, expiresAt: result.expiresAt });
         toast.error(`Locked by ${result.lockedByName}`);
-        return; // Don't open modal
+        return;
       }
       setLockAcquired(true);
       startHeartbeat(service.id);
@@ -849,10 +895,8 @@ export default function ServicesPage() {
       const isUpdate    = result.data.action === 'updated';
       const savedId     = result.data.id || editingService?.id;
 
-      // Mark as our own write so the meta listener doesn't trigger a stale banner
       myWriteRef.current = true;
 
-      // Optimistic update: patch the cache immediately, no re-fetch
       const cacheKey = currentCacheKey;
       const bucket   = cacheRef.current[cacheKey];
       if (bucket) {
@@ -863,13 +907,29 @@ export default function ServicesPage() {
             docs: bucket.docs.map(d => d.id === savedId ? fullService : d),
           };
         } else {
-          // Prepend new service
           cacheRef.current[cacheKey] = {
             ...bucket,
             docs: [fullService, ...bucket.docs],
           };
         }
         setDisplayedDocs(cacheRef.current[cacheKey].docs);
+      }
+
+      // CHANGED: also patch R2 in-memory cache so filters stay accurate after edits
+      if (categoryFilter) {
+        const cat        = categories.find(c => c.id === categoryFilter);
+        const exportName = cat?.json_export_name;
+        if (exportName && r2CacheRef.current[exportName]) {
+          const fullService = { ...serviceData, id: savedId, updatedAt: new Date() };
+          if (isUpdate) {
+            r2CacheRef.current[exportName] = r2CacheRef.current[exportName].map(
+              d => d.id === savedId ? fullService : d
+            );
+          } else {
+            r2CacheRef.current[exportName] = [fullService, ...r2CacheRef.current[exportName]];
+          }
+          setR2Docs(r2CacheRef.current[exportName]);
+        }
       }
 
       toast.success(isUpdate ? 'Service updated!' : 'Service created!');
@@ -893,12 +953,21 @@ export default function ServicesPage() {
           await httpsCallable(functions, 'deleteItems')({ collection: 'services_new', ids: [id] });
           myWriteRef.current = true;
 
-          // Optimistic: remove from active bucket
           const cacheKey = currentCacheKey;
           const bucket   = cacheRef.current[cacheKey];
           if (bucket) {
             cacheRef.current[cacheKey] = { ...bucket, docs: bucket.docs.filter(d => d.id !== id) };
             setDisplayedDocs(cacheRef.current[cacheKey].docs);
+          }
+
+          // CHANGED: patch R2 cache on delete
+          if (categoryFilter) {
+            const cat        = categories.find(c => c.id === categoryFilter);
+            const exportName = cat?.json_export_name;
+            if (exportName && r2CacheRef.current[exportName]) {
+              r2CacheRef.current[exportName] = r2CacheRef.current[exportName].filter(d => d.id !== id);
+              setR2Docs(r2CacheRef.current[exportName]);
+            }
           }
 
           toast.success('Service deleted!');
@@ -915,20 +984,29 @@ export default function ServicesPage() {
       const result = await httpsCallable(functions, 'duplicateItem')({ collection: 'services_new', id });
       myWriteRef.current = true;
 
-      // Optimistic: append a copy to the active bucket
       const cacheKey  = currentCacheKey;
       const bucket    = cacheRef.current[cacheKey];
       const original  = bucket?.docs.find(d => d.id === id);
       if (bucket && original) {
         const copy = {
           ...original,
-          id:      result.data?.id || `dup_${Date.now()}`,
+          id:       result.data?.id || `dup_${Date.now()}`,
           name_sor: (original.name_sor || '') + ' (نووسخە)',
           name_en:  (original.name_en  || '') + ' (Copy)',
           updatedAt: new Date(),
         };
         cacheRef.current[cacheKey] = { ...bucket, docs: [...bucket.docs, copy] };
         setDisplayedDocs(cacheRef.current[cacheKey].docs);
+
+        // CHANGED: patch R2 cache on duplicate
+        if (categoryFilter) {
+          const cat        = categories.find(c => c.id === categoryFilter);
+          const exportName = cat?.json_export_name;
+          if (exportName && r2CacheRef.current[exportName]) {
+            r2CacheRef.current[exportName] = [...r2CacheRef.current[exportName], copy];
+            setR2Docs(r2CacheRef.current[exportName]);
+          }
+        }
       }
 
       toast.success('Service duplicated!');
@@ -954,6 +1032,17 @@ export default function ServicesPage() {
             setDisplayedDocs(cacheRef.current[cacheKey].docs);
           }
 
+          // CHANGED: patch R2 cache on bulk delete
+          if (categoryFilter) {
+            const cat        = categories.find(c => c.id === categoryFilter);
+            const exportName = cat?.json_export_name;
+            if (exportName && r2CacheRef.current[exportName]) {
+              const removed = new Set(selectedServices);
+              r2CacheRef.current[exportName] = r2CacheRef.current[exportName].filter(d => !removed.has(d.id));
+              setR2Docs(r2CacheRef.current[exportName]);
+            }
+          }
+
           toast.success(`${selectedServices.length} services deleted!`);
           setSelectedServices([]);
         } catch (error) { toast.error(error.message || 'Failed'); }
@@ -972,7 +1061,6 @@ export default function ServicesPage() {
     return () => {
       stopHeartbeat();
       if (metaUnsubRef.current) metaUnsubRef.current();
-      // Release any held lock
       if (editingService && lockAcquired && user?.uid) {
         releaseLock(editingService.id, user.uid).catch(() => {});
       }
@@ -1041,6 +1129,14 @@ export default function ServicesPage() {
                 </button>
               )}
             </div>
+
+            {/* CHANGED: show a small loading indicator while R2 JSON is being fetched */}
+            {r2Loading && (
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="animate-spin rounded-full h-3 w-3 border-b border-gray-400" />
+                Loading full category data for filtering…
+              </div>
+            )}
 
             {subCatLangs.length > 0 && (
               <div className="border border-gray-100 rounded-lg p-3 bg-gray-50 space-y-2">
@@ -1123,10 +1219,11 @@ export default function ServicesPage() {
             <div className="flex items-center gap-3 mb-4">
               <p className="text-sm text-gray-500 shrink-0">
                 {filteredDocs.length} service{filteredDocs.length !== 1 ? 's' : ''}
-                {(hasActiveSubCat || hasActiveDd || searchTerm) && displayedDocs.length !== filteredDocs.length
-                  ? ` (filtered from ${displayedDocs.length} loaded)`
+                {/* CHANGED: show total from R2 when available, else loaded count */}
+                {(hasActiveSubCat || hasActiveDd || searchTerm) && filterPool.length !== filteredDocs.length
+                  ? ` (filtered from ${filterPool.length}${categoryFilter && r2Docs.length > 0 ? ' · full category' : ' loaded'})`
                   : ''}
-                {hasMore && <span className="text-gray-400"> · more available</span>}
+                {!categoryFilter && hasMore && <span className="text-gray-400"> · more available</span>}
               </p>
               <div className="flex-1 h-px bg-gray-200" />
             </div>
@@ -1141,6 +1238,13 @@ export default function ServicesPage() {
             <div className="card text-center py-12"><p className="text-gray-600">No services found</p></div>
           ) : (
             <>
+              {/*
+                CHANGED: The grid now renders `filteredDocs` which may come from R2.
+                However the card actions (edit/delete/duplicate) need the full service object.
+                R2 docs contain the same fields as Firestore docs so this works transparently.
+                The Firestore paginated list (displayedDocs) is still shown via infinite scroll
+                when no category filter is active or when R2 is unavailable.
+              */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredDocs.map(service => (
                   <div key={service.id} className="card hover:shadow-lg transition-all">
@@ -1151,7 +1255,6 @@ export default function ServicesPage() {
                           else setSelectedServices(p => p.filter(id => id !== service.id));
                         }} className="w-4 h-4 text-primary rounded" />
                       <div className="flex gap-1 items-center">
-                        {/* Lock badge — shown when we know this service is locked by someone else */}
                         {lockInfo && editingService?.id === service.id && (
                           <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
                             <FiLock size={11} /> {lockInfo.lockedByName}
@@ -1215,12 +1318,13 @@ export default function ServicesPage() {
                 ))}
               </div>
 
-              {/* Infinite scroll trigger */}
-              {hasMore && (
+              {/* Infinite scroll trigger — only shown when NOT using R2 full data */}
+              {/* CHANGED: hide infinite scroll sentinel when R2 covers the full dataset */}
+              {hasMore && (!categoryFilter || r2Docs.length === 0) && (
                 <div ref={loaderRef} className="flex items-center justify-center py-8">
                   {loadingMore
                     ? <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                    : <div className="h-8" /> /* invisible sentinel */}
+                    : <div className="h-8" />}
                 </div>
               )}
               {!hasMore && filteredDocs.length >= PAGE_SIZE && (
