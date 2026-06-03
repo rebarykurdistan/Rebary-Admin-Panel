@@ -855,43 +855,44 @@ export default function ServicesPage() {
 
   // ── Modal open / close ────────────────────────────────────────────────────
   const handleOpenModal = async (service = null) => {
-  setLockInfo(null);
-  setLockAcquired(false);
-
-  if (service) {
-    // ── 1. Acquire lock first (unchanged) ─────────────────────────────────
-    const result = await acquireLock(service.id, user?.uid, user?.displayName || user?.email || 'Admin');
-    if (!result.acquired) {
-      setLockInfo({ lockedByName: result.lockedByName, expiresAt: result.expiresAt });
-      toast.error(`Locked by ${result.lockedByName}`);
-      return;
-    }
-    setLockAcquired(true);
-    startHeartbeat(service.id);
-
-    // ── 2. Fetch fresh Firestore doc before populating the form ────────────
-    let freshService = service; // fallback to the list doc if fetch fails
-    try {
-      const { getDoc, doc } = await import('firebase/firestore');
-      const { db } = await import('../../lib/firebase');
-      const snap = await getDoc(doc(db, 'services_new', service.id));
-      if (snap.exists()) {
-        freshService = { id: snap.id, ...snap.data() };
+    setLockInfo(null);
+    setLockAcquired(false);
+  
+    if (service) {
+      const result = await acquireLock(service.id, user?.uid, user?.displayName || user?.email || 'Admin');
+      if (!result.acquired) {
+        setLockInfo({ lockedByName: result.lockedByName, expiresAt: result.expiresAt });
+        toast.error(`Locked by ${result.lockedByName}`);
+        return;
       }
-    } catch (err) {
-      console.warn('Fresh fetch failed, falling back to cached doc:', err);
+      setLockAcquired(true);
+      startHeartbeat(service.id);
+  
+      // Fetch fresh Firestore doc — falls back to list row if fetch fails
+      let freshService = service;
+      try {
+        const fetched = await getServiceById(service.id);
+        if (fetched) freshService = fetched;
+      } catch (err) {
+        console.warn('Fresh fetch failed, falling back to cached doc:', err);
+      }
+  
+      setEditingService(freshService);
+      setFormData(serviceToForm(freshService)); // ← always a real Firestore doc, never R2
+    } else {
+      setEditingService(null);
+      setFormData(emptyForm());
     }
-
-    setEditingService(freshService);
-    setFormData(serviceToForm(freshService)); // ← always uses Firestore doc, never R2
+  
     setShowModal(true);
-  } else {
-    // ── Add new service (unchanged) ────────────────────────────────────────
+  };
+  const handleCloseModal = async () => {
+    if (editingService && lockAcquired) {
+      await doReleaseLock(editingService.id);
+    }
+    setShowModal(false);
     setEditingService(null);
-    setFormData(emptyForm());
-    setShowModal(true);
-  }
-};
+  };
 
   const setField = (key, value) => setFormData(f => ({ ...f, [key]: value }));
 
