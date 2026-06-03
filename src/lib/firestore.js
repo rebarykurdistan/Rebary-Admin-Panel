@@ -95,7 +95,8 @@ export const getServicesPaginated = async ({
   const constraints = [orderBy('updatedAt', 'desc'), limit(pageSize + 1)];
 
   if (categoryId) {
-    constraints.unshift(where('categoryref', '==', categoryId));
+    const categoryDocRef = doc(db, 'categories_new', categoryId);
+    constraints.unshift(where('categoryref', '==', categoryDocRef));
   }
 
   if (afterCursor) {
