@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { getAllCategories, getServicesPaginated, subscribeToServicesMeta, acquireLock, renewLock, releaseLock } from '../../lib/firestore';
+import { getAllCategories, getServicesPaginated, getServiceById, subscribeToServicesMeta, acquireLock, renewLock, releaseLock } from '../../lib/firestore';
 import { app } from '../../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import Sidebar from '../../components/Sidebar';
