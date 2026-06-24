@@ -77,6 +77,7 @@ function emptyForm() {
     }
     f[`dd_${l}`]       = [];
     f[`tags_${l}_dd`]  = [];
+    f[`popdata_${l}`]  = [];
   });
   f.categoryref     = '';
   f.categoryref_new = [];
@@ -117,6 +118,14 @@ function serviceToForm(service) {
     if (ddArr) {
       const entries = Array.isArray(ddArr) ? ddArr : Object.values(ddArr);
       f[`dd_${l}`] = entries.map(e => ({
+        [`icon_${l}`]:  e[`icon_${l}`]  || '',
+        [`value_${l}`]: e[`value_${l}`] || '',
+      }));
+    }
+    const pdArr = service[`popdata_${l}`];
+    if (pdArr) {
+      const entries = Array.isArray(pdArr) ? pdArr : Object.values(pdArr);
+      f[`popdata_${l}`] = entries.map(e => ({
         [`icon_${l}`]:  e[`icon_${l}`]  || '',
         [`value_${l}`]: e[`value_${l}`] || '',
       }));
@@ -222,6 +231,10 @@ function formToServiceData(f) {
     data[`latlng_${l}`] = !isNaN(lat) && !isNaN(lng) ? { lat, lng } : null;
 
     data[`dd_${l}`] = (f[`dd_${l}`] || [])
+      .filter(e => e[`value_${l}`]?.trim())
+      .map(e => ({ [`icon_${l}`]: e[`icon_${l}`] || '', [`value_${l}`]: e[`value_${l}`] || '' }));
+
+    data[`popdata_${l}`] = (f[`popdata_${l}`] || [])
       .filter(e => e[`value_${l}`]?.trim())
       .map(e => ({ [`icon_${l}`]: e[`icon_${l}`] || '', [`value_${l}`]: e[`value_${l}`] || '' }));
 
@@ -348,6 +361,44 @@ function DdArrayEditor({ lang, entries, onChange }) {
         </div>
       ))}
       <button type="button" onClick={add} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"><FiPlus size={12} /> Add Entry</button>
+    </div>
+  );
+}
+
+// ── Popup-menu filter array editor (popdata_sor / popdata_bad / popdata_ar / popdata_en)
+// Identical structure to DdArrayEditor: each entry has icon_<lang> + value_<lang>.
+function PopdataArrayEditor({ lang, entries, onChange }) {
+  const add    = () => onChange([...entries, { [`icon_${lang}`]: '', [`value_${lang}`]: '' }]);
+  const remove = (i)           => onChange(entries.filter((_, idx) => idx !== i));
+  const update = (i, field, v) => onChange(entries.map((e, idx) => idx === i ? { ...e, [field]: v } : e));
+
+  return (
+    <div className="space-y-2">
+      {entries.map((entry, i) => (
+        <div key={i} className="flex gap-2 items-center">
+          <span className="text-xs text-gray-400 w-5 shrink-0">{i + 1}</span>
+          <input
+            type="text"
+            value={entry[`icon_${lang}`] || ''}
+            onChange={e => update(i, `icon_${lang}`, e.target.value)}
+            className="input text-sm w-24 shrink-0"
+            placeholder="Icon (emoji/url)"
+          />
+          <input
+            type="text"
+            value={entry[`value_${lang}`] || ''}
+            onChange={e => update(i, `value_${lang}`, e.target.value)}
+            className="input text-sm flex-1"
+            placeholder="Value"
+          />
+          <button type="button" onClick={() => remove(i)} className="text-red-400 hover:text-red-600 shrink-0">
+            <FiX size={14} />
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={add} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1">
+        <FiPlus size={12} /> Add Entry
+      </button>
     </div>
   );
 }
@@ -1571,6 +1622,21 @@ export default function ServicesPage() {
                         lang={lang}
                         entries={formData[`dd_${lang}`] || []}
                         onChange={entries => setField(`dd_${lang}`, entries)}
+                      />
+                    )}
+                  </LanguageTabs>
+                </Section>
+
+                <Section title="🔽 Popup Menu Filter (popdata_sor / popdata_bad / popdata_ar / popdata_en)">
+                  <p className="text-xs text-gray-500 mb-3">
+                    When present, tapping a subcategory on the home page shows a popup menu with these options before navigating to the service list. Each entry has an icon (URL or emoji) and a display value, stored per language. Leave empty to skip the popup and navigate directly.
+                  </p>
+                  <LanguageTabs>
+                    {lang => (
+                      <PopdataArrayEditor
+                        lang={lang}
+                        entries={formData[`popdata_${lang}`] || []}
+                        onChange={entries => setField(`popdata_${lang}`, entries)}
                       />
                     )}
                   </LanguageTabs>
